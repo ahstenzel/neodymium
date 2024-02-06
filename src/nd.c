@@ -1,94 +1,11 @@
 /**********************************************************
-* neodymium
+* nd.h
 *
-* Created by Alex Stenzel (2024)
+* Definitions for editor functionality.
 **********************************************************/
-/* ================ Includes */
+#include "nd.h"
 
-#define _DEFAULT_SOURCE
-#define _BSD_SOURCE
-#define _GNU_SOURCE
-
-#include <stdio.h>
-#include <errno.h>
-#include <ctype.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <fcntl.h>
-#include <time.h>
-#include <termios.h>
-#include <ncurses.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
-
-/* ================ Defines */
-
-#define ND_VERSION "0.0.1"
-#define ND_TAB_STOP 4
-
-#define CTRL_KEY(k) ((k) & 0x1f)
-
-#define ESC_SCREEN_CLEAR   "\x1b[2J",   4
-#define ESC_LINE_CLEAR     "\x1b[K",    3
-#define ESC_HOME_CURSOR    "\x1b[H",    3
-#define ESC_SHOW_CURSOR    "\x1b[?25h", 6
-#define ESC_HIDE_CURSOR    "\x1b[?25l", 6
-#define ESC_INVERT_COLOR   "\x1b[7m",   4
-#define ESC_DEFAULT_FORMAT "\x1b[m",    3
-
-#define WRITE_ESC(e) write(STDOUT_FILENO, e)
-#define STRBUF_ESC(b, e) strAppend(b, e)
-
-enum editorKey {
-	EK_BACKSPACE = 127,
-	EK_LEFT = 1000,
-	EK_RIGHT,
-	EK_UP,
-	EK_DOWN,
-	EK_PAGE_UP,
-	EK_PAGE_DOWN,
-	EK_HOME,
-	EK_END,
-	EK_DEL
-};
-
-enum editorFlag {
-	EF_DIRTY = 1
-};
-
-void editorSetStatusMessage(const char* fmt, ...);
-void editorSave();
-void editorRefreshScreen();
-char* editorPrompt(char* prompt);
-
-/* ================ Globals */
-
-typedef struct {
-	char* buf;
-	char* rbuf;
-	int len;
-	int rlen;
-} editorRow;
-
-struct editorConfig {
-	char* filename;
-	editorRow* rows;
-	int num_rows;
-	int cx, cy;
-	int rx;
-	int screen_rows, screen_cols;
-	int row_off, col_off;
-	int flags;
-	char status_msg[80];
-	time_t status_msg_time;
-	struct termios orig_termios;
-};
-
-struct editorConfig CFG;
-
-/* ================ Terminal control */
+editorConfig CFG;
 
 void fail(const char* str) {
 	WRITE_ESC(ESC_SCREEN_CLEAR);
@@ -292,8 +209,6 @@ void editorRowDelChar(editorRow* row, int at) {
 	CFG.flags |= EF_DIRTY;
 }
 
-/* ================ Editor operations */
-
 void editorInsertChar(int c) {
 	if (CFG.cy == CFG.num_rows) editorInsertRow(CFG.num_rows, "", 0);
 	editorRowInsertChar(&CFG.rows[CFG.cy], CFG.cx, c);
@@ -309,6 +224,7 @@ void editorInsertNewline() {
 		row = &CFG.rows[CFG.cy];
 		row->len = CFG.cx;
 		row->buf[row->len] = '\0';
+		editorUpdateRow(row);
 	}
 	CFG.cy++;
 	CFG.cx = 0;
@@ -330,15 +246,6 @@ void editorDelChar() {
 	}
 }
 
-/* ================ Buffers */
-
-typedef struct {
-	char* buf;
-	int len;
-} strBuf;
-
-#define STRBUF_INIT {NULL, 0}
-
 void strAppend(strBuf *sb, const char* str, int len) {
 	char* new = realloc(sb->buf, sb->len + len);
 
@@ -352,8 +259,6 @@ void strFree(strBuf *sb) {
 	free(sb->buf);
 	sb->len = 0;
 }
-
-/* ================ Input handling */
 
 char* editorPrompt(char* prompt) {
 	size_t bufsize = 128;
@@ -390,7 +295,7 @@ char* editorPrompt(char* prompt) {
 }
 
 void editorMoveCursor(int key) {
-	editorRow* row = (CFG.cy >=  CFG.num_rows) ? NULL : &CFG.rows[CFG.cy];
+	editorRow* row = (CFG.cy >= CFG.num_rows) ? NULL : &CFG.rows[CFG.cy];
 	
 	switch (key) {
 		case EK_LEFT:
@@ -424,7 +329,6 @@ void editorMoveCursor(int key) {
 }
 
 void editorProcessKeypress() {
-	static int quit_confirm = 1;
 	int c = editorReadKey();
 
 	switch(c) {
@@ -432,14 +336,25 @@ void editorProcessKeypress() {
 			editorInsertNewline();
 			break;
 		case CTRL_KEY('q'):
-			if (CFG.flags & EF_DIRTY && quit_confirm != 0) {
-				editorSetStatusMessage("WARNING- unsaved changes! Press Ctrl-Q again to quit without saving.");
-				quit_confirm = 0;
-				return;
+			if (CFG.flags & EF_DIRTY) {
+				while (1) {
+					char* res = editorPrompt("WARNING! Quit without saving? (y/N): %s");
+					if (res) {
+						for (char* r = res; *r; ++r) *r = tolower(*r);
+						if (strcmp(res, "y") == 0) {
+							WRITE_ESC(ESC_SCREEN_CLEAR);
+							WRITE_ESC(ESC_HOME_CURSOR);
+							exit(0);
+						} else if (strcmp(res, "n") == 0) {
+							return;
+						}
+					}
+				}
+			} else {
+				WRITE_ESC(ESC_SCREEN_CLEAR);
+				WRITE_ESC(ESC_HOME_CURSOR);
+				exit(0);
 			}
-			WRITE_ESC(ESC_SCREEN_CLEAR);
-			WRITE_ESC(ESC_HOME_CURSOR);
-			exit(0);
 			break;
 		case CTRL_KEY('s'):
 			editorSave();
@@ -485,18 +400,17 @@ void editorProcessKeypress() {
 			editorInsertChar(c);
 			break;
 	}
-
-	quit_confirm = 1;
 }
 
-/* ================ Output handling */
-
 void editorScroll() {
+	/* Calculate rendered cursor position */
 	CFG.rx = 0;
 	if (CFG.cy < CFG.num_rows) {
 		CFG.rx = editorRowCxToRx(&CFG.rows[CFG.cy], CFG.cx);
 	}
+	CFG.ry = CFG.cy + ND_HEADER;
 
+	/* Calculate offset values based on cursor position */
 	if (CFG.cy < CFG.row_off) {
 		CFG.row_off = CFG.cy;
 	}
@@ -512,7 +426,30 @@ void editorScroll() {
 }
 
 void editorDrawHeader(strBuf *sb) {
+	/* Draw file bar */
 	STRBUF_ESC(sb, ESC_LINE_CLEAR);
+	strAppend(sb, "\r\n", 2);
+
+	/* Draw tab bar */
+	STRBUF_ESC(sb, ESC_LINE_CLEAR);
+	STRBUF_ESC(sb, ESC_FORMAT_INVERT);
+	STRBUF_ESC(sb, ESC_FORMAT_UNDERLINE);
+
+	char* tab = malloc(CFG.screen_cols + 1);
+	int tab_len = snprintf(tab, CFG.screen_cols, "%s%-8.20s", 
+		CFG.flags & EF_DIRTY ? "*" : "",
+		CFG.filename ? basename(CFG.filename) : "[No Name]");
+	strAppend(sb, tab, tab_len);
+	STRBUF_ESC(sb, ESC_FORMAT_DEFAULT);
+	STRBUF_ESC(sb, ESC_FORMAT_INVERT);
+	strAppend(sb, "|", 1);
+	tab_len++;
+	while(tab_len < CFG.screen_cols) {
+		strAppend(sb, " ", 1);
+		tab_len++;
+	}
+
+	STRBUF_ESC(sb, ESC_FORMAT_DEFAULT);
 	strAppend(sb, "\r\n", 2);
 }
 
@@ -535,16 +472,17 @@ void editorDrawRows(strBuf *sb) {
 
 void editorDrawFooter(strBuf *sb) {
 	/* Draw status bar */
-	STRBUF_ESC(sb, ESC_INVERT_COLOR);
+	STRBUF_ESC(sb, ESC_FORMAT_INVERT);
 
+	/* Draw left message */
 	char lstatus[80], rstatus[80];
-	int llen = snprintf(lstatus, sizeof(lstatus), "%.20s%s - %d lines",
-		CFG.filename ? CFG.filename : "[No Name]", 
-		CFG.flags & EF_DIRTY ? "*" : "",
-		CFG.num_rows);
+	int llen = snprintf(lstatus, sizeof(lstatus), "%d lines", CFG.num_rows);
 	if (llen > CFG.screen_cols) llen = CFG.screen_cols;
+
+	/* Draw right message */
 	int rlen = snprintf(rstatus, sizeof(rstatus), "Ln %d, Col %d",
-		CFG.cy + 1, CFG.rx + 1);
+		CFG.cy + 1, 
+		CFG.rx + 1);
 	strAppend(sb, lstatus, llen);
 	while (llen < CFG.screen_cols) {
 		if ((CFG.screen_cols - llen == rlen) && (CFG.cy < CFG.num_rows)) {
@@ -556,7 +494,7 @@ void editorDrawFooter(strBuf *sb) {
 		}
 	}
 	
-	STRBUF_ESC(sb, ESC_DEFAULT_FORMAT);
+	STRBUF_ESC(sb, ESC_FORMAT_DEFAULT);
 	strAppend(sb, "\r\n", 2);
 
 	/* Draw status message */
@@ -577,12 +515,12 @@ void editorRefreshScreen() {
 	STRBUF_ESC(&screen, ESC_HIDE_CURSOR);
 	STRBUF_ESC(&screen, ESC_HOME_CURSOR);
 
-	//editorDrawHeader(&screen);
+	editorDrawHeader(&screen);
 	editorDrawRows(&screen);
 	editorDrawFooter(&screen);
 
 	char buf[32];
-	snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (CFG.cy - CFG.row_off)+1, (CFG.rx - CFG.col_off)+1);
+	snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (CFG.ry - CFG.row_off)+1, (CFG.rx - CFG.col_off)+1);
 	strAppend(&screen, buf, strlen(buf));
 	
 	STRBUF_ESC(&screen, ESC_SHOW_CURSOR);
@@ -599,8 +537,6 @@ void editorSetStatusMessage(const char* fmt, ...) {
 	va_end(ap);
 	CFG.status_msg_time = time(NULL);
 }
-
-/* ================ File operations */
 
 void editorOpen(char* filename) {
 	free(CFG.filename);
@@ -667,37 +603,19 @@ void editorSave() {
 	editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
 }
 
-/* ================ Init */
-
 void initEditor() {
+	CFG.filename = NULL;
+	CFG.rows = NULL;
+	CFG.num_rows = 0;
 	CFG.cx = 0;
 	CFG.cy = 0;
 	CFG.rx = 0;
-	CFG.num_rows = 0;
+	CFG.ry = ND_HEADER;
 	CFG.row_off = 0;
 	CFG.col_off = 0;
-	CFG.rows = NULL;
-	CFG.filename = NULL;
+	CFG.flags = 0;
 	CFG.status_msg[0] = '\0';
 	CFG.status_msg_time = 0;
-	CFG.flags = 0;
 	if (getWindowSize(&CFG.screen_rows, &CFG.screen_cols) == -1) fail("getWindowSize");
-	CFG.screen_rows -= 2;
-}
-
-int main(int argc, char* argv[]) {
-	enableRawMode();
-	initEditor();
-	if (argc >= 2) {
-		editorOpen(argv[1]);
-	}
-
-	editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit");
-
-	while (1) {
-		editorRefreshScreen();
-		editorProcessKeypress();
-	}
-
-	return 0;
+	CFG.screen_rows -= (ND_HEADER + ND_FOOTER);
 }
