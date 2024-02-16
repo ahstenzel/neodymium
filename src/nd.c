@@ -5,27 +5,47 @@
 **********************************************************/
 #include "nd.h"
 
-editorConfig CFG;
+editorConfig ED;
+
+#define ESC_SCANCODE         ED.esc_scancode
+#define ESC_SCREEN_CLEAR     ED.esc_screen_clear
+#define ESC_LINE_CLEAR       ED.esc_line_clear
+#define ESC_HOME_CURSOR      ED.esc_home_cursor
+#define ESC_SHOW_CURSOR      ED.esc_show_cursor
+#define ESC_HIDE_CURSOR      ED.esc_hide_cursor
+#define ESC_FORMAT_INVERT    ED.esc_format_invert
+#define ESC_FORMAT_UNDERLINE ED.esc_format_underline
+#define ESC_FORMAT_BOLD      ED.esc_format_bold
+#define ESC_FORMAT_DEFAULT   ED.esc_format_default
+#define ESC_NEWLINE          "\n\r"
+
+#define ESC_WRITE_SCREEN(e)    write(STDOUT_FILENO, e, strlen(e))
+#define ESC_WRITE_STRBUF(b, e) strAppend(b, e, strlen(e))
+
+#define ED_CURR_TAB &ED.etabs[ED.curr_tab]
 
 void fail(const char* str) {
-	WRITE_ESC(ESC_SCREEN_CLEAR);
-	WRITE_ESC(ESC_HOME_CURSOR);
+	ESC_WRITE_SCREEN(ESC_SCREEN_CLEAR);
+	ESC_WRITE_SCREEN(ESC_HOME_CURSOR);
 	perror(str);
 	write(STDOUT_FILENO, "\r", 2);
 	exit(1);
 }
 
 void disableRawMode() {
-	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &CFG.orig_termios) == -1) fail("tcsetattr");
+	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &ED.orig_termios) == -1) fail("tcsetattr");
 }
 
 void enableRawMode() {
+	/* Initialize terminfo database */
+	if (setupterm(getenv("TERM"), STDOUT_FILENO, NULL) == -1) fail("setupterm");
+
 	/* Save original terminal state for later */
-	if (tcgetattr(STDIN_FILENO, &CFG.orig_termios) == -1) fail("tcgetattr");
+	if (tcgetattr(STDIN_FILENO, &ED.orig_termios) == -1) fail("tcgetattr");
 	atexit(disableRawMode);
 
 	/* Modify terminal state */
-	struct termios raw = CFG.orig_termios;
+	struct termios raw = ED.orig_termios;
 	raw.c_iflag &= ~(IXON | ICRNL | BRKINT | INPCK | ISTRIP);
 	raw.c_oflag &= ~(OPOST);
 	raw.c_cflag |= (CS8);
@@ -45,7 +65,7 @@ int editorReadKey() {
 
 	if (c == '\x1b') {
 		/* Parse escaped character */
-		char seq[3];
+		char seq[5];
 		if (read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
 		if (read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
 		if (seq[0] == '[') {
@@ -60,6 +80,15 @@ int editorReadKey() {
 						case '6': return EK_PAGE_DOWN; break;
 						case '7': return EK_HOME; break;
 						case '8': return EK_END; break;
+					}
+				} else if (seq[2] == ';') {
+					if (read(STDIN_FILENO, &seq[3], 1) != 1) return '\x1b';
+					if (read(STDIN_FILENO, &seq[4], 1) != 1) return '\x1b';
+					if (seq[3] == '5') {
+						switch(seq[4]) {
+							case 'D': return EK_TABL; break;
+							case 'C': return EK_TABR; break;
+						}
 					}
 				}
 			} else {
@@ -85,38 +114,13 @@ int editorReadKey() {
 	}
 }
 
-int getCursorPosition(int *rows, int *cols) {
-	char buf[32];
-	unsigned int i = 0;
-
-	/* Query the cursors position */
-	if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
-
-	/* Read the result from stdin into a buffer */
-	while (i < sizeof(buf) - 1) {
-		if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
-		if (buf[i] == 'R') break;
-		i++;
-	}
-	buf[i] = '\0';
-
-	/* Parse the values from the buffer */
-	if (buf[0] != '\x1b' || buf[1] != '[') return -1;
-	if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
-	return 0;
-}
-
 int getWindowSize(int *rows, int *cols) {
-	struct winsize ws;
-
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-		if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
-		return getCursorPosition(rows, cols);
-	} else {
-		*cols = ws.ws_col;
-		*rows = ws.ws_row;
-		return 0;
-	}
+	int num_rows, num_cols;
+	if ((num_rows = tigetnum("lines")) == -2) return -1;
+	if ((num_cols = tigetnum("cols")) == -2) return -1;
+	*rows = num_rows;
+	*cols = num_cols;
+	return 0;
 }
 
 int editorRowCxToRx(editorRow* row, int cx) {
@@ -129,13 +133,13 @@ int editorRowCxToRx(editorRow* row, int cx) {
 }
 
 void editorUpdateRow(editorRow* row) {
-	int tabs = 0;
+	int ntabs = 0;
 	for (int j=0; j<row->len; ++j) {
-		if (row->buf[j] == '\t') tabs++;
+		if (row->buf[j] == '\t') ntabs++;
 	}
 
 	free(row->rbuf);
-	row->rbuf = malloc(row->len + (tabs * (ND_TAB_STOP - 1)) + 1);
+	row->rbuf = malloc(row->len + (ntabs * (ND_TAB_STOP - 1)) + 1);
 
 	int idx = 0;
 	for (int j=0; j<row->len; ++j) {
@@ -150,23 +154,23 @@ void editorUpdateRow(editorRow* row) {
 	row->rlen = idx;
 }
 
-void editorInsertRow(int at, char *str, size_t len) {
-	if (at < 0 || at > CFG.num_rows) return;
+void editorInsertRow(editorTab* etab, int at, char *str, size_t len) {
+	if (at < 0 || at > etab->num_rows) return;
 
-	CFG.rows = realloc(CFG.rows, sizeof *(CFG.rows) * (CFG.num_rows + 1));
-	memmove(&CFG.rows[at + 1], &CFG.rows[at], sizeof *(CFG.rows) * (CFG.num_rows - at));
+	etab->rows = realloc(etab->rows, sizeof *(etab->rows) * (etab->num_rows + 1));
+	memmove(&etab->rows[at + 1], &etab->rows[at], sizeof *(etab->rows) * (etab->num_rows - at));
 
-	CFG.rows[at].len = len;
-	CFG.rows[at].buf = malloc(len + 1);
-	memcpy(CFG.rows[at].buf, str, len);
-	CFG.rows[at].buf[len] = '\0';
+	etab->rows[at].len = len;
+	etab->rows[at].buf = malloc(len + 1);
+	memcpy(etab->rows[at].buf, str, len);
+	etab->rows[at].buf[len] = '\0';
 
-	CFG.rows[at].rlen = 0;
-	CFG.rows[at].rbuf = NULL;
-	editorUpdateRow(&CFG.rows[at]);
+	etab->rows[at].rlen = 0;
+	etab->rows[at].rbuf = NULL;
+	editorUpdateRow(&etab->rows[at]);
 
-	CFG.num_rows++;
-	CFG.flags |= EF_DIRTY;
+	etab->num_rows++;
+	etab->flags |= EF_DIRTY;
 }
 
 void editorFreeRow(editorRow* row) {
@@ -174,75 +178,110 @@ void editorFreeRow(editorRow* row) {
 	free(row->rbuf);
 }
 
-void editorDelRow(int at) {
-	if (at < 0 || at >= CFG.num_rows) return;
-	editorFreeRow(&CFG.rows[at]);
-	memmove(&CFG.rows[at], &CFG.rows[at + 1], sizeof *(CFG.rows) * (CFG.num_rows - at - 1));
-	CFG.num_rows--;
-	CFG.flags |= EF_DIRTY;
+void editorDelRow(editorTab* etab, int at) {
+	if (at < 0 || at >= etab->num_rows) return;
+	editorFreeRow(&etab->rows[at]);
+	memmove(&etab->rows[at], &etab->rows[at + 1], sizeof *(etab->rows) * (etab->num_rows - at - 1));
+	etab->num_rows--;
+	etab->flags |= EF_DIRTY;
 }
 
-void editorRowInsertChar(editorRow* row, int at, int c) {
+void editorRowInsertChar(editorTab* etab, editorRow* row, int at, int c) {
 	if (at < 0 || at > row->len) at = row->len;
 	row->buf = realloc(row->buf, row->len + 2);
 	memmove(&row->buf[at + 1], &row->buf[at], row->len - at + 1);
 	row->len++;
 	row->buf[at] = c;
 	editorUpdateRow(row);
-	CFG.flags |= EF_DIRTY;
+	etab->flags |= EF_DIRTY;
 }
 
-void editorRowAppendString(editorRow* row, char* str, size_t len) {
+void editorRowAppendString(editorTab* etab, editorRow* row, char* str, size_t len) {
 	row->buf = realloc(row->buf, row->len + len + 1);
 	memcpy(&row->buf[row->len], str, len);
 	row->len += len;
 	row->buf[row->len] = '\0';
 	editorUpdateRow(row);
-	CFG.flags |= EF_DIRTY;
+	etab->flags |= EF_DIRTY;
 }
 
-void editorRowDelChar(editorRow* row, int at) {
+void editorRowDelChar(editorTab* etab, editorRow* row, int at) {
 	if (at < 0 || at >= row->len) return;
 	memmove(&row->buf[at], &row->buf[at + 1], row->len - at);
 	row->len--;
 	editorUpdateRow(row);
-	CFG.flags |= EF_DIRTY;
+	etab->flags |= EF_DIRTY;
 }
 
-void editorInsertChar(int c) {
-	if (CFG.cy == CFG.num_rows) editorInsertRow(CFG.num_rows, "", 0);
-	editorRowInsertChar(&CFG.rows[CFG.cy], CFG.cx, c);
-	CFG.cx++;
+void editorInsertTab(editorTab* etab, int at) {
+	if (at < 0) at = ED.num_tabs;
+
+	ED.etabs = realloc(ED.etabs, sizeof(*etab) * (ED.num_tabs + 1));
+	if (at < ED.num_tabs) {
+		memmove(&ED.etabs[at + 1], &ED.etabs[at], sizeof(*etab) * (ED.num_tabs - at));
+	}
+	memcpy(&ED.etabs[at], etab, sizeof(*etab));
+	ED.num_tabs++;
+	ED.curr_tab = at;
 }
 
-void editorInsertNewline() {
-	if (CFG.cx == 0) {
-		editorInsertRow(CFG.cy, "", 0);
+void editorCloseTab(int at, int newtab) {
+	/* Clear tab resources */
+	if (at < 0 || at > ED.num_tabs - 1) return;
+	editorTab* etab = &ED.etabs[at];
+	free(etab->filename);
+	for(int i=0; i<etab->num_rows; ++i) {
+		editorFreeRow(&etab->rows[i]);
+	}
+	free(etab->rows);
+
+	/* Remove from global struct */
+	if (at < (ED.num_tabs - 1)) {
+		memmove(&ED.etabs[at], &ED.etabs[at + 1], sizeof(*etab) * (ED.num_tabs - at - 1));
+	}
+	ED.num_tabs--;
+	if (ED.curr_tab >= ED.num_tabs) ED.curr_tab = ED.num_tabs - 1;
+
+	/* Add blank tab if the last tab is closed */
+	if (ED.num_tabs == 0 && newtab == 1) {	
+		editorOpen(NULL);
+	}
+}
+
+void editorInsertChar(editorTab* etab, int c) {
+	if (etab->cy == etab->num_rows) editorInsertRow(etab, etab->num_rows, "", 0);
+	editorRowInsertChar(etab, &etab->rows[etab->cy], etab->cx, c);
+	etab->cx++;
+}
+
+void editorInsertNewline(editorTab* etab) {
+	if (etab->cx == 0) {
+		editorInsertRow(etab, etab->cy, "", 0);
 	} else {
-		editorRow* row = &CFG.rows[CFG.cy];
-		editorInsertRow(CFG.cy + 1, &row->buf[CFG.cx], row->len - CFG.cx);
-		row = &CFG.rows[CFG.cy];
-		row->len = CFG.cx;
+		editorRow* row = &etab->rows[etab->cy];
+		editorInsertRow(etab, etab->cy + 1, &row->buf[etab->cx], row->len - etab->cx);
+		row = &etab->rows[etab->cy];
+		row->len = etab->cx;
 		row->buf[row->len] = '\0';
 		editorUpdateRow(row);
 	}
-	CFG.cy++;
-	CFG.cx = 0;
+	etab->cy++;
+	etab->cx = 0;
 }
 
-void editorDelChar() {
-	if (CFG.cy == CFG.num_rows) return;
-	if (CFG.cx == 0 && CFG.cy == 0) return;
+void editorDelChar(editorTab* etab) {
+	if (etab->cy == etab->num_rows) return;
+	if (etab->cx == 0 && etab->cy == 0) return;
 
-	editorRow* row = &CFG.rows[CFG.cy];
-	if (CFG.cx > 0) {
-		editorRowDelChar(row, CFG.cx - 1);
-		CFG.cx--;
+	editorRow* row = &etab->rows[etab->cy];
+	if (etab->cx > 0) {
+		editorRowDelChar(etab, row, etab->cx - 1);
+		etab->cx--;
 	} else {
-		CFG.cx = CFG.rows[CFG.cy - 1].len;
-		editorRowAppendString(&CFG.rows[CFG.cy - 1], row->buf, row->len);
-		editorDelRow(CFG.cy);
-		CFG.cy--;
+		etab->cx = etab->rows[etab->cy - 1].len;
+		editorRowAppendString(etab, &etab->rows[etab->cy - 1], row->buf, row->len);
+		editorDelRow(etab, etab->cy);
+		etab->cy--;
 	}
 }
 
@@ -294,198 +333,221 @@ char* editorPrompt(char* prompt) {
 	}
 }
 
-void editorMoveCursor(int key) {
-	editorRow* row = (CFG.cy >= CFG.num_rows) ? NULL : &CFG.rows[CFG.cy];
+void editorMoveCursor(editorTab* etab, int key) {
+	editorRow* row = (etab->cy >= etab->num_rows) ? NULL : &etab->rows[etab->cy];
 	
 	switch (key) {
 		case EK_LEFT:
-			if (CFG.cx != 0) {
-				CFG.cx--;
-			} else if (CFG.cy > 0) {
-				CFG.cy--;
-				CFG.cx = CFG.rows[CFG.cy].len;
+			if (etab->cx != 0) {
+				etab->cx--;
+			} else if (etab->cy > 0) {
+				etab->cy--;
+				etab->cx = etab->rows[etab->cy].len;
 			}
 			break;
 		case EK_RIGHT:
-			if (row && CFG.cx < row->len) {
-				CFG.cx++;
-			} else if (row && CFG.cx == row->len) {
-				CFG.cy++;
-				CFG.cx = 0;
+			if (row && etab->cx < row->len) {
+				etab->cx++;
+			} else if (row && etab->cx == row->len) {
+				etab->cy++;
+				etab->cx = 0;
 			}
 			break;
 		case EK_UP:
-			if (CFG.cy != 0) CFG.cy--;
+			if (etab->cy != 0) etab->cy--;
 			break;
 		case EK_DOWN:
-			if (CFG.cy < CFG.num_rows) CFG.cy++;
+			if (etab->cy < etab->num_rows) etab->cy++;
 			break;
 	}
 
 	/* Snap cursor to line endings */
-	row = (CFG.cy >=  CFG.num_rows) ? NULL : &CFG.rows[CFG.cy];
+	row = (etab->cy >=  etab->num_rows) ? NULL : &etab->rows[etab->cy];
 	int row_len = row ? row->len : 0;
-	if (CFG.cx > row_len) CFG.cx = row_len;
+	if (etab->cx > row_len) etab->cx = row_len;
 }
 
 void editorProcessKeypress() {
+	editorTab* etab = ED_CURR_TAB;
 	int c = editorReadKey();
 
 	switch(c) {
 		case '\r':
-			editorInsertNewline();
+			editorInsertNewline(etab);
 			break;
 		case CTRL_KEY('q'):
-			if (CFG.flags & EF_DIRTY) {
+			if (etab->flags & EF_DIRTY) {
 				while (1) {
 					char* res = editorPrompt("WARNING! Quit without saving? (y/N): %s");
 					if (res) {
 						for (char* r = res; *r; ++r) *r = tolower(*r);
 						if (strcmp(res, "y") == 0) {
-							WRITE_ESC(ESC_SCREEN_CLEAR);
-							WRITE_ESC(ESC_HOME_CURSOR);
-							exit(0);
+							if (!etab->filename) {
+								editorQuit();
+							} else {
+								editorCloseTab(ED.curr_tab, 1);
+								break;
+							}
 						} else if (strcmp(res, "n") == 0) {
 							return;
 						}
 					}
 				}
 			} else {
-				WRITE_ESC(ESC_SCREEN_CLEAR);
-				WRITE_ESC(ESC_HOME_CURSOR);
-				exit(0);
+				if (!etab->filename) {
+					editorQuit();
+				} else {
+					editorCloseTab(ED.curr_tab, 1);
+				}
 			}
 			break;
 		case CTRL_KEY('s'):
-			editorSave();
+			editorSave(etab);
 			break;
 		case EK_PAGE_UP:
 		case EK_PAGE_DOWN:
 			{
 				if (c == EK_PAGE_UP) {
-					CFG.cy = CFG.row_off;
+					etab->cy = etab->row_off;
 				} else if (c == EK_PAGE_DOWN) {
-					CFG.cy = CFG.row_off + CFG.screen_rows - 1;
-					if (CFG.cy > CFG.num_rows) CFG.cy = CFG.num_rows;
+					etab->cy = etab->row_off + ED.screen_rows - 1;
+					if (etab->cy > etab->num_rows) etab->cy = etab->num_rows;
 				}
 
-				int n = CFG.screen_rows;
+				int n = ED.screen_rows;
 				while (n--) {
-					editorMoveCursor(c == EK_PAGE_UP ? EK_UP : EK_DOWN);
+					editorMoveCursor(etab, c == EK_PAGE_UP ? EK_UP : EK_DOWN);
 				}
 			}
 			break;
 		case EK_HOME:
-			CFG.cx = 0;
+			etab->cx = 0;
 			break;
 		case EK_END:
-			if (CFG.cy < CFG.num_rows) CFG.cx = CFG.rows[CFG.cy].len;
+			if (etab->cy < etab->num_rows) etab->cx = etab->rows[etab->cy].len;
 			break;
 		case EK_BACKSPACE:
 		case CTRL_KEY('h'):
 		case EK_DEL:
-			if (c == EK_DEL) editorMoveCursor(EK_RIGHT);
-			editorDelChar();
+			if (c == EK_DEL) editorMoveCursor(etab, EK_RIGHT);
+			editorDelChar(etab);
 			break;
 		case EK_UP:
 		case EK_DOWN:
 		case EK_LEFT:
 		case EK_RIGHT:
-			editorMoveCursor(c);
+			editorMoveCursor(etab, c);
+			break;
+		case EK_TABL:
+			ED.curr_tab--;
+			if (ED.curr_tab < 0) ED.curr_tab = ED.num_tabs - 1;
+			break;
+		case EK_TABR:
+			ED.curr_tab++;
+			if (ED.curr_tab > (ED.num_tabs - 1)) ED.curr_tab = 0;
 			break;
 		case CTRL_KEY('l'):
 		case '\x1b':
 			break;
 		default:
-			editorInsertChar(c);
+			editorInsertChar(etab, c);
 			break;
 	}
 }
 
-void editorScroll() {
+void editorScroll(editorTab* etab) {
 	/* Calculate rendered cursor position */
-	CFG.rx = 0;
-	if (CFG.cy < CFG.num_rows) {
-		CFG.rx = editorRowCxToRx(&CFG.rows[CFG.cy], CFG.cx);
+	etab->rx = 0;
+	if (etab->cy < etab->num_rows) {
+		etab->rx = editorRowCxToRx(&etab->rows[etab->cy], etab->cx);
 	}
-	CFG.ry = CFG.cy + ND_HEADER;
+	etab->ry = etab->cy + ND_HEADER;
 
 	/* Calculate offset values based on cursor position */
-	if (CFG.cy < CFG.row_off) {
-		CFG.row_off = CFG.cy;
+	if (etab->cy < etab->row_off) {
+		etab->row_off = etab->cy;
 	}
-	if (CFG.cy >= CFG.row_off + CFG.screen_rows) {
-		CFG.row_off = CFG.cy - CFG.screen_rows + 1;
+	if (etab->cy >= etab->row_off + ED.screen_rows) {
+		etab->row_off = etab->cy - ED.screen_rows + 1;
 	}
-	if (CFG.rx < CFG.col_off) {
-		CFG.col_off = CFG.rx;
+	if (etab->rx < etab->col_off) {
+		etab->col_off = etab->rx;
 	}
-	if (CFG.rx >= CFG.col_off + CFG.screen_cols) {
-		CFG.col_off = CFG.rx - CFG.screen_cols + 1;
+	if (etab->rx >= etab->col_off + ED.screen_cols) {
+		etab->col_off = etab->rx - ED.screen_cols + 1;
 	}
 }
 
 void editorDrawHeader(strBuf *sb) {
 	/* Draw file bar */
-	STRBUF_ESC(sb, ESC_LINE_CLEAR);
-	strAppend(sb, "\r\n", 2);
+	ESC_WRITE_STRBUF(sb, ESC_LINE_CLEAR);
+	ESC_WRITE_STRBUF(sb, ESC_NEWLINE);
 
 	/* Draw tab bar */
-	STRBUF_ESC(sb, ESC_LINE_CLEAR);
-	STRBUF_ESC(sb, ESC_FORMAT_INVERT);
-	STRBUF_ESC(sb, ESC_FORMAT_UNDERLINE);
+	ESC_WRITE_STRBUF(sb, ESC_LINE_CLEAR);
+	ESC_WRITE_STRBUF(sb, ESC_FORMAT_INVERT);
 
-	char* tab = malloc(CFG.screen_cols + 1);
-	int tab_len = snprintf(tab, CFG.screen_cols, "%s%-8.20s", 
-		CFG.flags & EF_DIRTY ? "*" : "",
-		CFG.filename ? basename(CFG.filename) : "[No Name]");
-	strAppend(sb, tab, tab_len);
-	STRBUF_ESC(sb, ESC_FORMAT_DEFAULT);
-	STRBUF_ESC(sb, ESC_FORMAT_INVERT);
-	strAppend(sb, "|", 1);
-	tab_len++;
-	while(tab_len < CFG.screen_cols) {
-		strAppend(sb, " ", 1);
+	int line_len = 0;
+	for(int i=0; i<ED.num_tabs; ++i) {
+		editorTab* etab = &ED.etabs[i];
+
+		/* Underline current tab */
+		if (i == ED.curr_tab) ESC_WRITE_STRBUF(sb, ESC_FORMAT_UNDERLINE);
+
+		/* Write tab name */
+		char* tab_str = malloc(ED.screen_cols + 1);
+		int tab_len = snprintf(tab_str, ED.screen_cols, "%s%-8.20s", 
+			etab->flags & EF_DIRTY ? "*" : "",
+			etab->filename ? basename(etab->filename) : "<No Name>");
+		strAppend(sb, tab_str, tab_len);
+		ESC_WRITE_STRBUF(sb, ESC_FORMAT_DEFAULT);
+		ESC_WRITE_STRBUF(sb, ESC_FORMAT_INVERT);
+		strAppend(sb, "|", 1);
 		tab_len++;
+		line_len += tab_len;
+	}
+	while(line_len < ED.screen_cols) {
+		strAppend(sb, " ", 1);
+		line_len++;
 	}
 
-	STRBUF_ESC(sb, ESC_FORMAT_DEFAULT);
-	strAppend(sb, "\r\n", 2);
+	ESC_WRITE_STRBUF(sb, ESC_FORMAT_DEFAULT);
+	ESC_WRITE_STRBUF(sb, ESC_NEWLINE);
 }
 
-void editorDrawRows(strBuf *sb) {
-	for (int y=0; y<CFG.screen_rows; ++y) {
-		int row = y + CFG.row_off;
-		if (row >= CFG.num_rows) {
+void editorDrawRows(editorTab* etab, strBuf *sb) {
+	for (int y=0; y<ED.screen_rows; ++y) {
+		int row = y + etab->row_off;
+		if (row >= etab->num_rows) {
 			strAppend(sb, "~", 1);
 		} else {
-			int len = CFG.rows[row].rlen - CFG.col_off;
+			int len = etab->rows[row].rlen - etab->col_off;
 			if (len < 0) len = 0;
-			if (len > CFG.screen_cols) len = CFG.screen_cols;
-			strAppend(sb, &CFG.rows[row].rbuf[CFG.col_off], len);
+			if (len > ED.screen_cols) len = ED.screen_cols;
+			strAppend(sb, &etab->rows[row].rbuf[etab->col_off], len);
 		}
 
-		STRBUF_ESC(sb, ESC_LINE_CLEAR);
-		strAppend(sb, "\r\n", 2);
+		ESC_WRITE_STRBUF(sb, ESC_LINE_CLEAR);
+		ESC_WRITE_STRBUF(sb, ESC_NEWLINE);
 	}
 }
 
-void editorDrawFooter(strBuf *sb) {
+void editorDrawFooter(editorTab* etab, strBuf *sb) {
 	/* Draw status bar */
-	STRBUF_ESC(sb, ESC_FORMAT_INVERT);
+	ESC_WRITE_STRBUF(sb, ESC_FORMAT_INVERT);
 
 	/* Draw left message */
 	char lstatus[80], rstatus[80];
-	int llen = snprintf(lstatus, sizeof(lstatus), "%d lines", CFG.num_rows);
-	if (llen > CFG.screen_cols) llen = CFG.screen_cols;
+	int llen = snprintf(lstatus, sizeof(lstatus), "%d lines", etab->num_rows);
+	if (llen > ED.screen_cols) llen = ED.screen_cols;
 
 	/* Draw right message */
 	int rlen = snprintf(rstatus, sizeof(rstatus), "Ln %d, Col %d",
-		CFG.cy + 1, 
-		CFG.rx + 1);
+		etab->cy + 1, 
+		etab->rx + 1);
 	strAppend(sb, lstatus, llen);
-	while (llen < CFG.screen_cols) {
-		if ((CFG.screen_cols - llen == rlen) && (CFG.cy < CFG.num_rows)) {
+	while (llen < ED.screen_cols) {
+		if ((ED.screen_cols - llen == rlen) && (etab->cy < etab->num_rows)) {
 			strAppend(sb, rstatus, rlen);
 			break;
 		} else {
@@ -494,36 +556,37 @@ void editorDrawFooter(strBuf *sb) {
 		}
 	}
 	
-	STRBUF_ESC(sb, ESC_FORMAT_DEFAULT);
-	strAppend(sb, "\r\n", 2);
+	ESC_WRITE_STRBUF(sb, ESC_FORMAT_DEFAULT);
+	ESC_WRITE_STRBUF(sb, ESC_NEWLINE);
 
 	/* Draw status message */
-	STRBUF_ESC(sb, ESC_LINE_CLEAR);
-	int msg_len = strlen(CFG.status_msg);
-	if (msg_len > CFG.screen_cols) msg_len = CFG.screen_cols;
-	if (msg_len && time(NULL) - CFG.status_msg_time < 5) {
-		strAppend(sb, CFG.status_msg, msg_len);
+	ESC_WRITE_STRBUF(sb, ESC_LINE_CLEAR);
+	int msg_len = strlen(ED.status_msg);
+	if (msg_len > ED.screen_cols) msg_len = ED.screen_cols;
+	if (msg_len && time(NULL) - ED.status_msg_time < 5) {
+		strAppend(sb, ED.status_msg, msg_len);
 	}
 }
 
 void editorRefreshScreen() {
-	editorScroll();
-
-	strBuf screen = STRBUF_INIT;
+	editorTab* etab = ED_CURR_TAB;
+	/* Set scroll offsets */
+	editorScroll(etab);
 	
 	/* Write contents to screen buffer */
-	STRBUF_ESC(&screen, ESC_HIDE_CURSOR);
-	STRBUF_ESC(&screen, ESC_HOME_CURSOR);
+	strBuf screen = STRBUF_INIT;
+	ESC_WRITE_STRBUF(&screen, ESC_HIDE_CURSOR);
+	ESC_WRITE_STRBUF(&screen, ESC_HOME_CURSOR);
 
 	editorDrawHeader(&screen);
-	editorDrawRows(&screen);
-	editorDrawFooter(&screen);
+	editorDrawRows(etab, &screen);
+	editorDrawFooter(etab, &screen);
 
+	/* Set cursor position */
 	char buf[32];
-	snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (CFG.ry - CFG.row_off)+1, (CFG.rx - CFG.col_off)+1);
+	snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (etab->ry - etab->row_off)+1, (etab->rx - etab->col_off)+1);
 	strAppend(&screen, buf, strlen(buf));
-	
-	STRBUF_ESC(&screen, ESC_SHOW_CURSOR);
+	ESC_WRITE_STRBUF(&screen, ESC_SHOW_CURSOR);
 
 	/* Write buffer to terminal */
 	write(STDOUT_FILENO, screen.buf, screen.len);
@@ -533,17 +596,27 @@ void editorRefreshScreen() {
 void editorSetStatusMessage(const char* fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
-	vsnprintf(CFG.status_msg, sizeof(CFG.status_msg), fmt, ap);
+	vsnprintf(ED.status_msg, sizeof(ED.status_msg), fmt, ap);
 	va_end(ap);
-	CFG.status_msg_time = time(NULL);
+	ED.status_msg_time = time(NULL);
 }
 
 void editorOpen(char* filename) {
-	free(CFG.filename);
-	CFG.filename = strdup(filename);
+	/* Create etab struct */
+	editorTab* etab = malloc(sizeof(*etab));
+	initTab(etab);
+	editorInsertTab(etab, -1);
+	if (!filename) {
+		return;
+	} else {
+		free(etab);
+		etab = ED_CURR_TAB;
+	}
+
+	/* Read contents */
+	etab->filename = strdup(filename);
 	FILE *fp = fopen(filename, "r");
 	if (!fp) fail("fopen");
-
 	char* line = NULL;
 	size_t linecap = 0;
 	ssize_t linelen;
@@ -551,25 +624,25 @@ void editorOpen(char* filename) {
 		while (linelen > 0 && (line[linelen - 1] == '\n' || line[linelen - 1] == '\r')) {
 			linelen--;
 		}
-		editorInsertRow(CFG.num_rows, line, linelen);
+		editorInsertRow(etab, etab->num_rows, line, linelen);
 	}
 	free(line);
 	fclose(fp);
-	CFG.flags &= ~(EF_DIRTY);
+	etab->flags &= ~(EF_DIRTY);
 }
 
-char* editorRowsToString(int* buflen) {
+char* editorRowsToString(editorTab* etab, int* buflen) {
 	int len = 0;
-	for (int j=0; j<CFG.num_rows; ++j) {
-		len += CFG.rows[j].len + 1;
+	for (int j=0; j<etab->num_rows; ++j) {
+		len += etab->rows[j].len + 1;
 	}
 	*buflen = len;
 
 	char* buf = malloc(len);
 	char* p = buf;
-	for (int j=0; j<CFG.num_rows; ++j) {
-		memcpy(p, CFG.rows[j].buf, CFG.rows[j].len);
-		p += CFG.rows[j].len;
+	for (int j=0; j<etab->num_rows; ++j) {
+		memcpy(p, etab->rows[j].buf, etab->rows[j].len);
+		p += etab->rows[j].len;
 		*p = '\n';
 		p++;
 	}
@@ -577,23 +650,22 @@ char* editorRowsToString(int* buflen) {
 	return buf;
 }
 
-void editorSave() {
-	if (CFG.filename == NULL) {
-		CFG.filename = editorPrompt("Save as: %s (ESC to cancel)");
-		if (!CFG.filename) return;
+void editorSave(editorTab* etab) {
+	if (etab->filename == NULL) {
+		etab->filename = editorPrompt("Save as: %s (ESC to cancel)");
+		if (!etab->filename) return;
 	}
 
 	int len;
-	char* buf = editorRowsToString(&len);
+	char* buf = editorRowsToString(etab, &len);
 
-	int fd = open(CFG.filename, O_RDWR | O_CREAT, 0644);
+	int fd = open(etab->filename, O_RDWR | O_CREAT, 0644);
 	if (fd != -1) {
 		if (ftruncate(fd, len) != -1) {
 			if (write(fd, buf, len) == len) {
 				close(fd);
 				free(buf);
-				CFG.flags &= ~(EF_DIRTY);
-				editorSetStatusMessage("%d bytes written to disk", len);
+				etab->flags &= ~(EF_DIRTY);
 				return;
 			}
 		}
@@ -603,19 +675,52 @@ void editorSave() {
 	editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
 }
 
+void editorQuit() {
+	/* Check for unsaved tabs */
+
+	/* Close all tabs */
+	for(int i=0; i<ED.num_tabs; ++i) {
+		editorCloseTab(i, 0);
+	}
+
+	/* Clear screen & exit */
+	ESC_WRITE_SCREEN(ESC_SCREEN_CLEAR);
+	ESC_WRITE_SCREEN(ESC_HOME_CURSOR);
+	exit(0);
+}
+
 void initEditor() {
-	CFG.filename = NULL;
-	CFG.rows = NULL;
-	CFG.num_rows = 0;
-	CFG.cx = 0;
-	CFG.cy = 0;
-	CFG.rx = 0;
-	CFG.ry = ND_HEADER;
-	CFG.row_off = 0;
-	CFG.col_off = 0;
-	CFG.flags = 0;
-	CFG.status_msg[0] = '\0';
-	CFG.status_msg_time = 0;
-	if (getWindowSize(&CFG.screen_rows, &CFG.screen_cols) == -1) fail("getWindowSize");
-	CFG.screen_rows -= (ND_HEADER + ND_FOOTER);
+	ED.etabs = NULL;
+	ED.num_tabs = 0;
+	ED.curr_tab = 0;
+	ED.status_msg[0] = '\0';
+	ED.status_msg_time = 0;
+	if (getWindowSize(&ED.screen_rows, &ED.screen_cols) == -1) fail("getWindowSize");
+	ED.screen_rows -= (ND_HEADER + ND_FOOTER);
+
+	/* Record escape codes */
+	ESC_SCANCODE         = tigetstr("scesa");
+	ESC_SCREEN_CLEAR     = tigetstr("clear");
+	ESC_LINE_CLEAR       = tigetstr("el");
+	ESC_HOME_CURSOR      = tigetstr("home");
+	ESC_SHOW_CURSOR      = tigetstr("cvvis");
+	ESC_HIDE_CURSOR      = tigetstr("civis");
+	ESC_FORMAT_INVERT    = tigetstr("rev");
+	ESC_FORMAT_UNDERLINE = tigetstr("smul");
+	ESC_FORMAT_BOLD      = tigetstr("bold");
+	ESC_FORMAT_DEFAULT   = tigetstr("sgr0");
+}
+
+void initTab(editorTab* etab) {
+	if (!etab) return;
+	etab->filename = NULL;
+	etab->rows = NULL;
+	etab->num_rows = 0;
+	etab->cx = 0;
+	etab->cy = 0;
+	etab->rx = 0;
+	etab->ry = ND_HEADER;
+	etab->row_off = 0;
+	etab->col_off = 0;
+	etab->flags = 0;
 }

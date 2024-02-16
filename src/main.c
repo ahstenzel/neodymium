@@ -9,10 +9,12 @@ int main(int argc, char* argv[]) {
 	enableRawMode();
 	initEditor();
 	if (argc >= 2) {
-		editorOpen(argv[1]);
+		for(int i=1; i<argc; ++i) {
+			editorOpen(argv[i]);
+		}
+	} else {
+		editorOpen(NULL);
 	}
-
-	editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit");
 
 	while (1) {
 		editorRefreshScreen();

@@ -25,12 +25,8 @@
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
-
-/*
-#ifndef ND_DISABLE_CURSES
+#include <term.h>
 #include <ncurses.h>
-#endif
-*/
 
 /* ==================================== Defines */
 
@@ -40,18 +36,6 @@
 #define ND_FOOTER 2
 
 #define CTRL_KEY(k) ((k) & 0x1f)
-
-#define ESC_SCREEN_CLEAR     "\x1b[2J",   4
-#define ESC_LINE_CLEAR       "\x1b[K",    3
-#define ESC_HOME_CURSOR      "\x1b[H",    3
-#define ESC_SHOW_CURSOR      "\x1b[?25h", 6
-#define ESC_HIDE_CURSOR      "\x1b[?25l", 6
-#define ESC_FORMAT_INVERT    "\x1b[7m",   4
-#define ESC_FORMAT_UNDERLINE "\x1b[4m",   4
-#define ESC_FORMAT_DEFAULT   "\x1b[m",    3
-
-#define WRITE_ESC(e) write(STDOUT_FILENO, e)
-#define STRBUF_ESC(b, e) strAppend(b, e)
 
 enum editorKey {
 	EK_BACKSPACE = 127,
@@ -63,7 +47,9 @@ enum editorKey {
 	EK_PAGE_DOWN,
 	EK_HOME,
 	EK_END,
-	EK_DEL
+	EK_DEL,
+	EK_TABL,
+	EK_TABR
 };
 
 enum editorFlag {
@@ -86,12 +72,29 @@ typedef struct {
 	int num_rows;
 	int cx, cy;
 	int rx, ry;
-	int screen_rows, screen_cols;
 	int row_off, col_off;
 	int flags;
+} editorTab;
+
+typedef struct {
+	editorTab* etabs;
+	int num_tabs;
+	int curr_tab;
+	int screen_cols, screen_rows;
 	char status_msg[80];
 	time_t status_msg_time;
 	struct termios orig_termios;
+
+	char* esc_scancode;
+	char* esc_screen_clear;
+	char* esc_line_clear;
+	char* esc_home_cursor;
+	char* esc_show_cursor;
+	char* esc_hide_cursor;
+	char* esc_format_invert;
+	char* esc_format_underline;
+	char* esc_format_bold;
+	char* esc_format_default;
 } editorConfig;
 
 
@@ -105,8 +108,6 @@ void enableRawMode();
 
 int editorReadKey();
 
-int getCursorPosition(int *rows, int *cols);
-
 int getWindowSize(int *rows, int *cols);
 
 
@@ -116,26 +117,33 @@ int editorRowCxToRx(editorRow* row, int cx);
 
 void editorUpdateRow(editorRow* row);
 
-void editorInsertRow(int at, char *str, size_t len);
+void editorInsertRow(editorTab* etab, int at, char *str, size_t len);
 
 void editorFreeRow(editorRow* row);
 
-void editorDelRow(int at);
+void editorDelRow(editorTab* etab, int at);
 
-void editorRowInsertChar(editorRow* row, int at, int c);
+void editorRowInsertChar(editorTab* etab, editorRow* row, int at, int c);
 
-void editorRowAppendString(editorRow* row, char* str, size_t len);
+void editorRowAppendString(editorTab* etab, editorRow* row, char* str, size_t len);
 
-void editorRowDelChar(editorRow* row, int at);
+void editorRowDelChar(editorTab* etab, editorRow* row, int at);
+
+
+/* ==================================== Tab operations */
+
+void editorInsertTab(editorTab* etab, int at);
+
+void editorCloseTab(int at, int newtab);
 
 
 /* ==================================== Editor operations */
 
-void editorInsertChar(int c);
+void editorInsertChar(editorTab* etab, int c);
 
-void editorInsertNewline();
+void editorInsertNewline(editorTab* etab);
 
-void editorDelChar();
+void editorDelChar(editorTab* etab);
 
 
 /* ==================================== String buffers */
@@ -156,20 +164,20 @@ void strFree(strBuf *sb);
 
 char* editorPrompt(char* prompt);
 
-void editorMoveCursor(int key);
+void editorMoveCursor(editorTab* etab, int key);
 
 void editorProcessKeypress();
 
 
 /* ==================================== Output operations */
 
-void editorScroll();
+void editorScroll(editorTab* etab);
 
 void editorDrawHeader(strBuf *sb);
 
-void editorDrawRows(strBuf *sb);
+void editorDrawRows(editorTab* etab, strBuf *sb);
 
-void editorDrawFooter(strBuf *sb);
+void editorDrawFooter(editorTab* etab, strBuf *sb);
 
 void editorRefreshScreen();
 
@@ -180,13 +188,17 @@ void editorSetStatusMessage(const char* fmt, ...);
 
 void editorOpen(char* filename);
 
-char* editorRowsToString(int* buflen);
+char* editorRowsToString(editorTab* etab, int* buflen);
 
-void editorSave();
+void editorSave(editorTab* etab);
+
+void editorQuit();
 
 
 /* ==================================== Initialization operations */
 
 void initEditor();
+
+void initTab(editorTab* etab);
 
 #endif
