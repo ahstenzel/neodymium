@@ -38,6 +38,7 @@
 #define CTRL_KEY(k) ((k) & 0x1f)
 
 enum editorKey {
+	EK_ESCAPE = 27,
 	EK_BACKSPACE = 127,
 	EK_LEFT = 1000,
 	EK_RIGHT,
@@ -85,7 +86,6 @@ typedef struct {
 	time_t status_msg_time;
 	struct termios orig_termios;
 
-	char* esc_scancode;
 	char* esc_screen_clear;
 	char* esc_line_clear;
 	char* esc_home_cursor;
@@ -135,6 +135,8 @@ void editorRowDelChar(editorTab* etab, editorRow* row, int at);
 void editorInsertTab(editorTab* etab, int at);
 
 void editorCloseTab(int at, int newtab);
+
+void editorSetTab(int at);
 
 
 /* ==================================== Editor operations */
@@ -186,11 +188,11 @@ void editorSetStatusMessage(const char* fmt, ...);
 
 /* ==================================== File operations */
 
-void editorOpen(char* filename);
+int editorOpen(char* filename);
 
 char* editorRowsToString(editorTab* etab, int* buflen);
 
-void editorSave(editorTab* etab);
+int editorSave(editorTab* etab);
 
 void editorQuit();
 

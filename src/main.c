@@ -12,6 +12,7 @@ int main(int argc, char* argv[]) {
 		for(int i=1; i<argc; ++i) {
 			editorOpen(argv[i]);
 		}
+		editorSetTab(0);
 	} else {
 		editorOpen(NULL);
 	}

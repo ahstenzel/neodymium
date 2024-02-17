@@ -7,7 +7,6 @@
 
 editorConfig ED;
 
-#define ESC_SCANCODE         ED.esc_scancode
 #define ESC_SCREEN_CLEAR     ED.esc_screen_clear
 #define ESC_LINE_CLEAR       ED.esc_line_clear
 #define ESC_HOME_CURSOR      ED.esc_home_cursor
@@ -63,14 +62,14 @@ int editorReadKey() {
 		if (nread == -1 && errno != EAGAIN) fail("read");
 	}
 
-	if (c == '\x1b') {
+	if (c == EK_ESCAPE) {
 		/* Parse escaped character */
 		char seq[5];
-		if (read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
-		if (read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
+		if (read(STDIN_FILENO, &seq[0], 1) != 1) return EK_ESCAPE;
+		if (read(STDIN_FILENO, &seq[1], 1) != 1) return EK_ESCAPE;
 		if (seq[0] == '[') {
 			if (seq[1] >= '0' && seq[1] <= '9') {
-				if (read(STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
+				if (read(STDIN_FILENO, &seq[2], 1) != 1) return EK_ESCAPE;
 				if (seq[2] == '~') {
 					switch (seq[1]) {
 						case '1': return EK_HOME; break;
@@ -82,8 +81,8 @@ int editorReadKey() {
 						case '8': return EK_END; break;
 					}
 				} else if (seq[2] == ';') {
-					if (read(STDIN_FILENO, &seq[3], 1) != 1) return '\x1b';
-					if (read(STDIN_FILENO, &seq[4], 1) != 1) return '\x1b';
+					if (read(STDIN_FILENO, &seq[3], 1) != 1) return EK_ESCAPE;
+					if (read(STDIN_FILENO, &seq[4], 1) != 1) return EK_ESCAPE;
 					if (seq[3] == '5') {
 						switch(seq[4]) {
 							case 'D': return EK_TABL; break;
@@ -108,7 +107,7 @@ int editorReadKey() {
 			}
 		}
 
-		return '\x1b';
+		return EK_ESCAPE;
 	} else {
 		return c;
 	}
@@ -248,6 +247,11 @@ void editorCloseTab(int at, int newtab) {
 	}
 }
 
+void editorSetTab(int at) {
+	if (at < 0 || at > ED.num_tabs - 1) at = ED.num_tabs - 1;
+	ED.curr_tab = at;
+}
+
 void editorInsertChar(editorTab* etab, int c) {
 	if (etab->cy == etab->num_rows) editorInsertRow(etab, etab->num_rows, "", 0);
 	editorRowInsertChar(etab, &etab->rows[etab->cy], etab->cx, c);
@@ -313,7 +317,7 @@ char* editorPrompt(char* prompt) {
 		int c = editorReadKey();
 		if (c == EK_DEL || c == CTRL_KEY('h') || c == EK_BACKSPACE) {
 			if (buflen != 0) buf[--buflen] = '\0';
-		} else if (c == '\x1b') {
+		} else if (c == EK_ESCAPE) {
 			editorSetStatusMessage("");
 			free(buf);
 			return NULL;
@@ -370,6 +374,7 @@ void editorMoveCursor(editorTab* etab, int key) {
 void editorProcessKeypress() {
 	editorTab* etab = ED_CURR_TAB;
 	int c = editorReadKey();
+	static int escapeCounter = 0;
 
 	switch(c) {
 		case '\r':
@@ -378,7 +383,7 @@ void editorProcessKeypress() {
 		case CTRL_KEY('q'):
 			if (etab->flags & EF_DIRTY) {
 				while (1) {
-					char* res = editorPrompt("WARNING! Quit without saving? (y/N): %s");
+					char* res = editorPrompt("WARNING! Quit without saving? (y/n): %s");
 					if (res) {
 						for (char* r = res; *r; ++r) *r = tolower(*r);
 						if (strcmp(res, "y") == 0) {
@@ -402,7 +407,24 @@ void editorProcessKeypress() {
 			}
 			break;
 		case CTRL_KEY('s'):
-			editorSave(etab);
+			if (editorSave(etab) != 0) {
+				editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
+			}
+			break;
+		case CTRL_KEY('o'):
+			{
+				char* filename = editorPrompt("Open file: %s (ESC to cancel)");
+				if (filename) {
+					if (editorOpen(filename) != 0) {
+						editorSetStatusMessage("Failed to open file!");
+					} else {
+						editorSetTab(-1);
+					}
+				}
+				break;
+			}
+		case CTRL_KEY('n'):
+			editorOpen(NULL);
 			break;
 		case EK_PAGE_UP:
 		case EK_PAGE_DOWN:
@@ -447,11 +469,23 @@ void editorProcessKeypress() {
 			if (ED.curr_tab > (ED.num_tabs - 1)) ED.curr_tab = 0;
 			break;
 		case CTRL_KEY('l'):
-		case '\x1b':
+		case EK_ESCAPE:
+			escapeCounter++;
+			if (escapeCounter < 2) {
+				editorSetStatusMessage("Press Esc again to quit");
+				return;
+			} else {
+				editorQuit();
+			}
 			break;
 		default:
 			editorInsertChar(etab, c);
 			break;
+	}
+
+	if (escapeCounter != 0) {
+		escapeCounter = 0;
+		editorSetStatusMessage("");
 	}
 }
 
@@ -491,8 +525,11 @@ void editorDrawHeader(strBuf *sb) {
 	for(int i=0; i<ED.num_tabs; ++i) {
 		editorTab* etab = &ED.etabs[i];
 
-		/* Underline current tab */
-		if (i == ED.curr_tab) ESC_WRITE_STRBUF(sb, ESC_FORMAT_UNDERLINE);
+		/* Underline & bold current tab */
+		if (i == ED.curr_tab) {
+			ESC_WRITE_STRBUF(sb, ESC_FORMAT_UNDERLINE);
+			ESC_WRITE_STRBUF(sb, ESC_FORMAT_BOLD);
+		}
 
 		/* Write tab name */
 		char* tab_str = malloc(ED.screen_cols + 1);
@@ -601,13 +638,13 @@ void editorSetStatusMessage(const char* fmt, ...) {
 	ED.status_msg_time = time(NULL);
 }
 
-void editorOpen(char* filename) {
+int editorOpen(char* filename) {
 	/* Create etab struct */
 	editorTab* etab = malloc(sizeof(*etab));
 	initTab(etab);
 	editorInsertTab(etab, -1);
 	if (!filename) {
-		return;
+		return 0;
 	} else {
 		free(etab);
 		etab = ED_CURR_TAB;
@@ -616,7 +653,7 @@ void editorOpen(char* filename) {
 	/* Read contents */
 	etab->filename = strdup(filename);
 	FILE *fp = fopen(filename, "r");
-	if (!fp) fail("fopen");
+	if (!fp) return 1;
 	char* line = NULL;
 	size_t linecap = 0;
 	ssize_t linelen;
@@ -628,7 +665,10 @@ void editorOpen(char* filename) {
 	}
 	free(line);
 	fclose(fp);
+
+	/* Check file flags */
 	etab->flags &= ~(EF_DIRTY);
+	return 0;
 }
 
 char* editorRowsToString(editorTab* etab, int* buflen) {
@@ -650,10 +690,10 @@ char* editorRowsToString(editorTab* etab, int* buflen) {
 	return buf;
 }
 
-void editorSave(editorTab* etab) {
+int editorSave(editorTab* etab) {
 	if (etab->filename == NULL) {
 		etab->filename = editorPrompt("Save as: %s (ESC to cancel)");
-		if (!etab->filename) return;
+		if (!etab->filename) return 0;
 	}
 
 	int len;
@@ -666,17 +706,62 @@ void editorSave(editorTab* etab) {
 				close(fd);
 				free(buf);
 				etab->flags &= ~(EF_DIRTY);
-				return;
+				return 0;
 			}
 		}
 		close(fd);
 	}
 	free(buf);
-	editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
+	return 1;
 }
 
 void editorQuit() {
 	/* Check for unsaved tabs */
+	int saveAll = -1;
+	for(int i=0; i<ED.num_tabs; ++i) {
+		editorTab* etab = &ED.etabs[i];
+		if (etab->flags & EF_DIRTY) {
+			/* Ask if the user wants to save all open files */
+			if (saveAll == -1) {
+				while (saveAll == -1) {
+					char* res = editorPrompt("Save all files? (y/N): %s");
+					if (res) {
+						for (char* r = res; *r; ++r) *r = tolower(*r);
+						if (strcmp(res, "y") == 0) {
+							saveAll = 1;
+						} else if (strcmp(res, "n") == 0) {
+							saveAll = 0;
+						}
+					}
+				}
+			} else if (saveAll == 1) {
+				/* Try to save file */
+				while(1) {
+					ED.curr_tab = i;
+					if (editorSave(etab) != 0) {
+						/* I/O error; ask the user what to do */
+						int action = -1;
+						while(action == -1) {
+							char* err = editorPrompt("Failed to save file! Retry, skip, or abort? (r/s/a): %s");
+							if (err) {
+								for (char* r = err; *r; ++r) *r = tolower(*r);
+								if (strcmp(err, "r") == 0) {
+									action = 0;
+								} else if (strcmp(err, "s") == 0) {
+									action = 1;
+								} else if (strcmp(err, "a") == 0) {
+									action = 2;
+								}
+							}
+						}
+						if (action == 0) continue;
+						else if (action == 1) break;
+						else if (action == 2) return;
+					} else break;
+				}
+			}
+		}
+	}
 
 	/* Close all tabs */
 	for(int i=0; i<ED.num_tabs; ++i) {
@@ -699,7 +784,6 @@ void initEditor() {
 	ED.screen_rows -= (ND_HEADER + ND_FOOTER);
 
 	/* Record escape codes */
-	ESC_SCANCODE         = tigetstr("scesa");
 	ESC_SCREEN_CLEAR     = tigetstr("clear");
 	ESC_LINE_CLEAR       = tigetstr("el");
 	ESC_HOME_CURSOR      = tigetstr("home");
