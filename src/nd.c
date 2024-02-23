@@ -242,7 +242,7 @@ void editorCloseTab(int at, int newtab) {
 	if (ED.curr_tab >= ED.num_tabs) ED.curr_tab = ED.num_tabs - 1;
 
 	/* Add blank tab if the last tab is closed */
-	if (ED.num_tabs == 0 && newtab == 1) {	
+	if (ED.num_tabs == 0 && newtab == 1) {
 		editorOpen(NULL);
 	}
 }
@@ -296,6 +296,13 @@ void strAppend(strBuf *sb, const char* str, int len) {
 	memcpy(&new[sb->len], str, len);
 	sb->buf = new;
 	sb->len += len;
+}
+
+void strSet(strBuf *sb, const char* str, int len, int start) {
+	if (start > sb->len) return;
+	if (start < 0) start = sb->len - len - (-start) + 1;
+	if (start + len > sb->len) len = sb->len - start;
+	memcpy(&sb->buf[start], str, len);
 }
 
 void strFree(strBuf *sb) {
@@ -399,7 +406,7 @@ void editorProcessKeypress() {
 					}
 				}
 			} else {
-				if (!etab->filename) {
+				if (!etab->filename && ED.num_tabs == 1) {
 					editorQuit();
 				} else {
 					editorCloseTab(ED.curr_tab, 1);
@@ -554,7 +561,9 @@ void editorDrawHeader(strBuf *sb) {
 
 void editorDrawRows(editorTab* etab, strBuf *sb) {
 	for (int y=0; y<ED.screen_rows; ++y) {
+		/* Copy rendered text to screen buffer */
 		int row = y + etab->row_off;
+		
 		if (row >= etab->num_rows) {
 			strAppend(sb, "~", 1);
 		} else {
@@ -562,6 +571,42 @@ void editorDrawRows(editorTab* etab, strBuf *sb) {
 			if (len < 0) len = 0;
 			if (len > ED.screen_cols) len = ED.screen_cols;
 			strAppend(sb, &etab->rows[row].rbuf[etab->col_off], len);
+		}
+
+		/* Draw scroll bar */
+		if (ED.screen_rows < (etab->num_rows + 1)) {
+			int len = (row >= etab->num_rows) ? 1 : etab->rows[row].rlen - etab->col_off;
+			/* Fill in line with spaces */
+			for(int x=len; x<ED.screen_cols - 1; ++x) {
+				strAppend(sb, " ", 1);
+			}
+
+			if (y == 0) {
+				/* Draw top arrow */
+				ESC_WRITE_STRBUF(sb, ESC_FORMAT_INVERT);
+				strAppend(sb, "^", 1);
+				ESC_WRITE_STRBUF(sb, ESC_FORMAT_DEFAULT);
+			} else if (y == (ED.screen_rows - 1)) {
+				/* Draw bottom arrow */
+				ESC_WRITE_STRBUF(sb, ESC_FORMAT_INVERT);
+				strAppend(sb, "v", 1);
+				ESC_WRITE_STRBUF(sb, ESC_FORMAT_DEFAULT);
+			} else {
+				float bar_ratio = ED.screen_rows / (float)(etab->num_rows + 1);
+				int bar_height = (int)(bar_ratio * (ED.screen_rows - 2)) - 1;
+				float row_ratio = etab->row_off / (float)((etab->num_rows + 1) - ED.screen_rows);
+				int bar_offset = (int)(row_ratio * (ED.screen_rows - 2 - (bar_height + 1))) + 1;
+
+				if (y < bar_offset || y > (bar_offset + bar_height)) {
+					/* Draw bar background */
+					strAppend(sb, "|", 1);
+				} else {
+					/* Draw bar */
+					ESC_WRITE_STRBUF(sb, ESC_FORMAT_INVERT);
+					strAppend(sb, " ", 1);
+					ESC_WRITE_STRBUF(sb, ESC_FORMAT_DEFAULT);
+				}
+			}
 		}
 
 		ESC_WRITE_STRBUF(sb, ESC_LINE_CLEAR);

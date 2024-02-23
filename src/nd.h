@@ -159,6 +159,8 @@ typedef struct {
 
 void strAppend(strBuf *sb, const char* str, int len);
 
+void strSet(strBuf *sb, const char* str, int len, int start);
+
 void strFree(strBuf *sb);
 
 
