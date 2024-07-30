@@ -1,26 +1,32 @@
-/**********************************************************
-* neodymium
-*
-* Created by Alex Stenzel (2024)
-**********************************************************/
-#include "nd.h"
+/**
+ * main.c
+ * 
+ * Created by Alex Stenzel (2024)
+ */
+#include "neo.h"
 
 int main(int argc, char* argv[]) {
-	enableRawMode();
-	initEditor();
+	// Initialize ncurses
+	cursesInit();
+
+	// Create editor context
+	editorContext* ctx = editorInit();
+	if (!ctx) { return 1; }
+
+	// Load files from command line
 	if (argc >= 2) {
 		for(int i=1; i<argc; ++i) {
-			editorOpen(argv[i]);
+			editorOpenPage(ctx, argv[i]);
 		}
-		editorSetTab(0);
+		editorSetPage(ctx, 0);
 	} else {
-		editorOpen(NULL);
+		editorOpenPage(ctx, NULL);
 	}
 
-	while (1) {
-		editorRefreshScreen();
-		editorProcessKeypress();
+	// Event loop
+	while(editorGetState(ctx) != ES_SHOULD_CLOSE) {
+		refresh();
 	}
-
+	endwin();
 	return 0;
 }
