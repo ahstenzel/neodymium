@@ -10,7 +10,8 @@ int main(int argc, char* argv[]) {
 	cursesInit();
 
 	// Create editor context
-	editorContext* ctx = editorInit();
+	editorContext* ctx = malloc(sizeof *ctx);
+	editorInit(ctx);
 	if (!ctx) { return 1; }
 
 	// Load files from command line
@@ -25,8 +26,15 @@ int main(int argc, char* argv[]) {
 
 	// Event loop
 	while(editorGetState(ctx) != ES_SHOULD_CLOSE) {
+		editorUpdate(ctx);
+		editorPrint(ctx);
 		refresh();
+		int ch = getch();
+		editorHandleInput(ctx, ch);
 	}
 	endwin();
+
+	editorClear(ctx);
+	free(ctx);
 	return 0;
 }
