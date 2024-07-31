@@ -29,11 +29,16 @@ void strbufDelete(strbuf* buf, unsigned int at, unsigned int len) {
 	if (!buf || at >= buf->size || len == 0) { return; }
 
 	// Adjust boundaries
-	if (at + len >= buf->size) { len -= (at + len) - buf->size; }
+	if (at + len >= buf->size) { 
+		len -= (at + len) - buf->size; 
+	}
 
 	// Shift data around
-	if (at + len < (buf->size - 1)) { memmove(&buf->data[at], &buf->data[at + len], buf->size - (at + len) + 1); }
-	else { buf->data[at + 1] = '\0'; }
+	if (at + len + 1 < buf->size) { 
+		memmove(&buf->data[at], &buf->data[at + len], buf->size - (at + len) + 1); 
+	} else { 
+		buf->data[at + 1] = '\0'; 
+	}
 	buf->size -= len;
 }
 
@@ -41,7 +46,9 @@ void strbufAppend(strbuf* buf, const char* str, unsigned int len) {
 	if (!buf || !str || len == 0) { return; }
 
 	// Resize if necessary
-	if (buf->size + len > (buf->capacity - 1)) { strbufGrow(buf); }
+	if (buf->size + len + 1 > buf->capacity) { 
+		strbufGrow(buf, buf->capacity + len + 1); 
+	}
 
 	// Copy to end of buffer
 	memcpy(&buf->data[buf->size], str, len);
@@ -53,7 +60,9 @@ void strbufInsert(strbuf* buf, const char* str, unsigned int len, unsigned int a
 	if (!buf || !str || len == 0) { return; }
 
 	// Resize if necessary
-	if (len + buf->size > (buf->capacity - 1)) { strbufGrow(buf); }
+	if (len + buf->size + 1 > buf->capacity) { 
+		strbufGrow(buf, buf->capacity + len + 1); 
+	}
 
 	// Shift data around
 	memmove(&buf->data[at + len], &buf->data[at], (buf->size - at) + 1);
@@ -67,18 +76,24 @@ void strbufSet(strbuf* buf, const char* str, unsigned int len, unsigned int at) 
 	if (!buf || !str || len == 0) { return; }
 
 	// Resize if necessary
-	if (at + len > (buf->capacity - 1)) { strbufGrow(buf); }
+	if (at + len + 1 > buf->capacity) { 
+		strbufGrow(buf, at + len + 1); 
+	}
 
 	// Overwrite data
 	memcpy(&buf->data[at], str, len);
-	if (at + len > buf->size) { buf->size += (at + len) - buf->size; }
+	if (at + len > buf->size) { 
+		buf->size += (at + len) - buf->size; 
+	}
 	buf->data[buf->size] = '\0';
 }
 
 void strbufAddChar(strbuf* buf, char c) {
 	if (!buf) { return; }
 
-	if (buf->size >= (buf->capacity - 1)) { strbufGrow(buf); }
+	if (buf->size + 1 >= buf->capacity) { 
+		strbufGrow(buf, buf->capacity + 1); 
+	}
 	buf->data[buf->size++] = c;
 	buf->data[buf->size] = '\0';
 }
@@ -86,30 +101,39 @@ void strbufAddChar(strbuf* buf, char c) {
 void strbufDelChar(strbuf* buf) {
 	if (!buf) { return; }
 
-	buf->data[--buf->size] = '\0';
+	if (buf->size > 0) { 
+		buf->data[--buf->size] = '\0'; 
+	}
 }
 
 char strbufGetChar(strbuf* buf, int at) {
 	if (!buf) { return '\0'; }
-	if (at < 0) { at += buf->size; }
-	if (at < 0 || at >= buf->size) { return '\0'; }
+
+	if (at < 0) { 
+		at = buf->size; 
+	}
+	if ((unsigned int)(at) >= buf->size) { 
+		return '\0'; 
+	}
 	return buf->data[at];
 }
 
-void strbufGrow(strbuf* buf) {
-	unsigned int newCapacity = (buf->capacity == 0) ? 40 : buf->capacity * 2;
+void strbufGrow(strbuf* buf, unsigned int min_size) {
+	unsigned int newCapacity = buf->capacity;
+	while (newCapacity < min_size) { 
+		newCapacity = (newCapacity == 0) ? 40 : newCapacity * 2; 
+	}
 	char* newData = realloc(buf->data, newCapacity);
 	if (!newData) { return; }
 	buf->data = newData;
 	buf->capacity = newCapacity;
-	buf->data[buf->size] = '\0';
 }
 
 void rowInit(editorRow* row) {
 	if (!row) { return; }
 
-	strbufInit(&row->text, 1);
-	strbufInit(&row->rtext, 1);
+	strbufInit(&row->text, 0);
+	strbufInit(&row->rtext, 0);
 	row->dirty = false;
 }
 
@@ -124,21 +148,21 @@ void rowUpdate(editorContext* ctx, editorRow* row) {
 	if (!row || !row->dirty) { return; }
 
 	// Count tabs
-	int ntabs = 0;
-	for(int i=0; i<row->text.size; ++i) {
+	unsigned int ntabs = 0;
+	for(unsigned int i=0; i<row->text.size; ++i) {
 		if (row->text.data[i] == '\t') { ntabs++; }
 	}
 
 	// Allocate render buffer
-	strbufClear(&row->rtext);
+	strbufDelete(&row->rtext, 0, row->rtext.size);
 	strbufInit(&row->rtext, row->text.size + (ntabs * (ctx->settingTabStop - 1)) + 1);
 
 	// Render text
-	for(int j=0; j<row->text.size; ++j) {
+	for(unsigned int j=0; j<row->text.size; ++j) {
 		if (strbufGetChar(&row->text, j) == '\t') {
 			strbufAddChar(&row->rtext, ' ');
 			while(row->rtext.size % ctx->settingTabStop != 0) { 
-				strbufAddChar(&row->rtext, ' ');
+				strbufAddChar(&row->rtext, ' '); 
 			}
 		} else {
 			strbufAddChar(&row->rtext, strbufGetChar(&row->text, j));
@@ -166,8 +190,8 @@ void pageInit(editorPage* page) {
 void pageClear(editorPage* page) {
 	if (!page) { return; }
 
-	for(int i=0; i<page->numRows; ++i) {
-		rowClear(&page->rows[i]);
+	for(int i=0; i<page->numRows; ++i) { 
+		rowClear(&page->rows[i]); 
 	}
 	free(page->filename);
 	free(page->rows);
@@ -176,8 +200,8 @@ void pageClear(editorPage* page) {
 void pageUpdate(editorContext* ctx, editorPage* page) {
 	if (!page) { return; }
 
-	for(int i=0; i<page->numRows; ++i) {
-		rowUpdate(ctx, &page->rows[i]);
+	for(int i=0; i<page->numRows; ++i) { 
+		rowUpdate(ctx, &page->rows[i]); 
 	}
 }
 
@@ -187,8 +211,8 @@ void pageGrowRows(editorPage* page) {
 	int newSize = (page->maxRows == 0) ? 48 : (page->maxRows * 2);
 	editorRow* newRows = realloc(page->rows, newSize * sizeof(*newRows));
 	if (!newRows) { return; }
-	for(int i=page->numRows; i<newSize; ++i) {
-		rowInit(&newRows[i]);
+	for(int i=page->numRows; i<newSize; ++i) { 
+		rowInit(&newRows[i]); 
 	}
 	page->rows = newRows;
 	page->maxRows = newSize;
@@ -198,10 +222,14 @@ void pageInsertRow(editorPage* page, int at, char* str, unsigned int len) {
 	if (!page) { return; }
 	
 	// Check boundaries
-	if (at < 0 || at > page->numRows) { at = page->numRows; }
+	if (at < 0 || at > page->numRows) { 
+		at = page->numRows; 
+	}
 
 	// Resize if necessary
-	if (page->numRows >= page->maxRows) { pageGrowRows(page); }
+	if (page->numRows >= page->maxRows) { 
+		pageGrowRows(page); 
+	}
 
 	// Shift rows down
 	if (at < page->numRows) {
@@ -210,7 +238,7 @@ void pageInsertRow(editorPage* page, int at, char* str, unsigned int len) {
 
 	// Copy text buffer to row
 	editorRow* row = &page->rows[at];
-	rowInit(row);
+	strbufDelete(&row->text, 0, row->text.size);
 	strbufSet(&row->text, str, len, 0);
 	row->dirty = true;
 
@@ -220,23 +248,28 @@ void pageInsertRow(editorPage* page, int at, char* str, unsigned int len) {
 }
 
 void pageDeleteRow(editorPage* page, int at) {
-
+	(void)(page);
+	(void)(at);
 }
 
 void pageMoveCursor(editorPage* page, int dir, int num) {
-
+	(void)(page);
+	(void)(dir);
+	(void)(num);
 }
 
 void pageSetCursorRow(editorPage* page, int at) {
-
+	(void)(page);
+	(void)(at);
 }
 
 void pageSetCursorCol(editorPage* page, int at) {
-
+	(void)(page);
+	(void)(at);
 }
 
 void pageSave(editorPage* page) {
-
+	(void)(page);
 }
 
 void editorInit(editorContext* ctx) {
@@ -257,8 +290,8 @@ void editorInit(editorContext* ctx) {
 void editorClear(editorContext* ctx) {
 	if (!ctx) { return; }
 
-	for(int i=0; i<ctx->numPages; ++i) {
-		pageClear(&ctx->pages[i]);
+	for(int i=0; i<ctx->numPages; ++i) { 
+		pageClear(&ctx->pages[i]); 
 	}
 	free(ctx->pages);
 }
@@ -266,8 +299,8 @@ void editorClear(editorContext* ctx) {
 void editorUpdate(editorContext* ctx) {
 	if (!ctx) { return; }
 
-	for(int i=0; i<ctx->numPages; ++i) {
-		pageUpdate(ctx, &ctx->pages[i]);
+	for(int i=0; i<ctx->numPages; ++i) { 
+		pageUpdate(ctx, &ctx->pages[i]); 
 	}
 }
 
@@ -277,8 +310,8 @@ void editorGrowPages(editorContext* ctx) {
 	int newSize = (ctx->maxPages == 0) ? 1 : (ctx->maxPages * 2);
 	editorPage* newPages = realloc(ctx->pages, newSize * sizeof(*newPages));
 	if (!newPages) { return; }
-	for(int i=ctx->numPages; i<newSize; ++i) {
-		pageInit(&newPages[i]);
+	for(int i=ctx->numPages; i<newSize; ++i) { 
+		pageInit(&newPages[i]); 
 	}
 	ctx->pages = newPages;
 	ctx->maxPages = newSize;
@@ -293,77 +326,157 @@ void editorPrint(editorContext* ctx) {
 	if (!ctx) { return; }
 
 	// Calculate rendered cursor position
-	editorPage* page = EDITOR_CURR_PAGE(ctx);
-	page->rx = 0;
-	if (page->cy < page->numRows) {
-		editorRow* row = &page->rows[page->cy];
-		for(int i=0; i<page->cx; ++i) {
+	editorPage* currPage = EDITOR_CURR_PAGE(ctx);
+	currPage->rx = 0;
+	if (currPage->cy < currPage->numRows) {
+		editorRow* row = &currPage->rows[currPage->cy];
+		for(int i=0; i<currPage->cx; ++i) {
 			if (strbufGetChar(&row->text, i) == '\t') { 
-				page->rx += (ctx->settingTabStop - 1) - (page->rx % ctx->settingTabStop); 
+				currPage->rx += (ctx->settingTabStop - 1) - (currPage->rx % ctx->settingTabStop); 
 			}
-			page->rx++;
+			currPage->rx++;
 		}
 	}
-	page->ry = page->cy + NEO_HEADER;
+	currPage->ry = currPage->cy + NEO_HEADER;
 
 	// Calculate row & column offsets
-	if (page->cy < page->rowOff) { page->rowOff = page->cy; }
-	if (page->cy >= page->rowOff + ctx->screenRows) { page->rowOff = page->cy - ctx->screenRows + 1; }
-	if (page->rx < page->colOff) { page->colOff = page->rx; }
-	if (page->rx >= page->colOff + ctx->screenCols) { page->colOff = page->rx - ctx->screenCols + 1; }
+	if (currPage->cy < currPage->rowOff) { currPage->rowOff = currPage->cy; }
+	if (currPage->cy >= currPage->rowOff + ctx->screenRows) { currPage->rowOff = currPage->cy - ctx->screenRows + 1; }
+	if (currPage->rx < currPage->colOff) { currPage->colOff = currPage->rx; }
+	if (currPage->rx >= currPage->colOff + ctx->screenCols) { currPage->colOff = currPage->rx - ctx->screenCols + 1; }
 
-	// Write header
-	strbuf screenBuffer;
-	strbufInit(&screenBuffer, ctx->screenRows * ctx->screenCols);
-	strbufAppend(&screenBuffer, "File\n", 5);
-	strbufAppend(&screenBuffer, "Tabs\n", 5);
+	// Write file bar
+	move(0, 0);
+	clear();
+	attron(A_UNDERLINE); printw("F"); attroff(A_UNDERLINE); printw("ile    ");
+	attron(A_UNDERLINE); printw("E"); attroff(A_UNDERLINE); printw("dit    ");
+	attron(A_UNDERLINE); printw("H"); attroff(A_UNDERLINE); printw("elp\n");
 
-	// Write page
-	for(int y=0; y<ctx->screenRows; ++y) {
-		int rowIdx = y + page->rowOff;
-		editorRow* row = &page->rows[rowIdx];
-
-		if (rowIdx >= page->numRows) {
-			strbufAppend(&screenBuffer, "~\n", 2);
-		} else {
-			int len = row->rtext.size - page->colOff;
-			if (len < 0) { len = 0; }
-			if (len > ctx->screenCols) { len = ctx->screenCols; }
-			strbufAppend(&screenBuffer, row->rtext.data, len);
-			strbufAddChar(&screenBuffer, '\n');
+	// Calculate page tab scroll
+	int pageIdx = 0;
+	int total = 0;
+	for(int i=1; i<ctx->numPages; ++i) {
+		editorPage* lastPage = &ctx->pages[i - 1];
+		if (lastPage->filename) { 
+			total += strlen(lastPage->filename) + 3; 
+		} else { 
+			total += 13; 
+		}
+		if (total >= (ctx->screenCols / 2)) {
+			total = 3;
+			pageIdx++;
 		}
 	}
 
-	// Write footer
-	strbufAppend(&screenBuffer, "Status\n", 8);
-	strbufAppend(&screenBuffer, "\n", 1);
+	// Write page tabs
+	attron(A_REVERSE);
+	int charIdx = 0;
+	while(charIdx < ctx->screenCols) {
+		editorPage* page = &ctx->pages[pageIdx];
 
-	// Write buffer to terminal
-	move(0, 0);
-	clear();
-	printw(screenBuffer.data);
+		// Write start of line
+		if (pageIdx > 0 && charIdx == 0) {
+			charIdx += 3;
+			addstr("< |");
+		}
 
-	// Cleanup
-	move(page->ry - page->rowOff, page->rx - page->colOff + 1);
-	strbufClear(&screenBuffer);
+		// Write filename
+		if (pageIdx == ctx->currPage) { 
+			attron(A_UNDERLINE | A_STANDOUT); 
+		}
+		if (page->flags & EF_DIRTY) { 
+			charIdx++;
+			addch('*'); 
+		}
+		if (!page->filename) { 
+			charIdx += 10;
+			addnstr("<untitled>", ctx->screenCols - charIdx - 2); 
+		} else { 
+			charIdx += strlen(page->filename);
+			addnstr(page->filename, ctx->screenCols - charIdx - 2);
+		}
+
+		// Write end of line
+		if (ctx->screenCols - charIdx < 2) {
+			attroff(A_STANDOUT | A_UNDERLINE);
+			while(ctx->screenCols - charIdx < 5) { 
+				delch(); 
+				charIdx--;
+			}
+			charIdx += 5;
+			addstr("... >");
+		} else {
+			charIdx += 2;
+			addch(' ');
+			if (pageIdx == ctx->currPage) { attroff(A_UNDERLINE | A_STANDOUT); }
+			addch('|');
+		}
+
+		// Fill spaces
+		pageIdx++;
+		if (pageIdx >= ctx->numPages) {
+			while(charIdx < ctx->screenCols) {
+				charIdx++;
+				addch(' ');
+			}
+		}
+	}
+	attroff(A_REVERSE);
+
+	// Write page
+	for(int i=0; i<ctx->screenRows; ++i) {
+		int rowIdx = i + currPage->rowOff;
+		editorRow* row = &currPage->rows[rowIdx];
+
+		if (rowIdx >= currPage->numRows) {
+			printw("~\n");
+		} else {
+			int len = row->rtext.size - currPage->colOff;
+			if (len < 0) { len = 0; }
+			if (len > ctx->screenCols) { len = ctx->screenCols; }
+			addnstr(row->rtext.data, len);
+			if (len < ctx->screenCols) { addch('\n'); }
+		}
+	}
+
+	// Write status bar
+	attron(A_REVERSE);
+	addstr(ctx->statusMsg);
+	int statusIdx = strlen(ctx->statusMsg);
+	char linePos[32];
+	int lineLen = snprintf(linePos, sizeof(linePos), "Ln %d, Col %d", currPage->cy + 1, currPage->rx + 1);
+	for(int i=statusIdx; i<ctx->screenCols - lineLen; ++i) { 
+		addch(' '); 
+	}
+	addstr(linePos);
+	attroff(A_REVERSE);
+
+	// Write bottom bar
+	move(currPage->ry - currPage->rowOff, currPage->rx - currPage->colOff);
 }
 
 void editorHandleInput(editorContext* ctx, int key) {
-
+	(void)(ctx);
+	(void)(key);
 }
 
 void editorOpenPage(editorContext* ctx, char* filename) {
 	if (!ctx) { return; }
 	
 	// Create page
-	if (ctx->numPages >= ctx->maxPages) { editorGrowPages(ctx); }
+	if (ctx->numPages >= ctx->maxPages) { 
+		editorGrowPages(ctx); 
+	}
 	ctx->currPage = ctx->numPages;
 	ctx->numPages++;
-	if (!filename) { return; }
+	editorPage* page = EDITOR_CURR_PAGE(ctx);
+	if (!filename) { 
+		pageInsertRow(page, -1, "", 0);
+		return; 
+	}
 
 	// Populate page with file contents
-	editorPage* page = EDITOR_CURR_PAGE(ctx);
-	page->filename = strdup(filename);
+	page->filename = strdup(basename(filename));
 	FILE *fp = fopen(filename, "r");
 	if (!fp) { return; }
 	char* line = NULL;
@@ -385,6 +498,10 @@ void editorOpenPage(editorContext* ctx, char* filename) {
 
 void editorSetPage(editorContext* ctx, int at) {
 	if (!ctx) { return; }
-	if (at >=0 && at < ctx->numPages) { ctx->currPage = at; }
-	else if (at < 0 && at >= -(ctx->numPages)) { ctx->currPage = ctx->numPages - at; }
+	if (at >=0 && at < ctx->numPages) { 
+		ctx->currPage = at; 
+	}
+	else if (at < 0 && at >= -(ctx->numPages)) { 
+		ctx->currPage = ctx->numPages - at; 
+	}
 }

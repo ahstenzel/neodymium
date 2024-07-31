@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <string.h>
 #include <time.h>
+#include <libgen.h>
 #include <ncurses.h>
 
 
@@ -113,7 +114,8 @@ char strbufGetChar(strbuf* buf, int at);
 
 /// @brief Grow internal array of characters.
 /// @param buf String buffer pointer
-void strbufGrow(strbuf* buf);
+/// @param min_size Minimum new size the buffer should be
+void strbufGrow(strbuf* buf, unsigned int min_size);
 
 
 // ============================================== editor objects
