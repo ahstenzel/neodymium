@@ -150,7 +150,7 @@ void rowUpdate(editorContext* ctx, editorRow* row) {
 	// Count tabs
 	unsigned int ntabs = 0;
 	for(unsigned int i=0; i<row->text.size; ++i) {
-		if (row->text.data[i] == '\t') { ntabs++; }
+		if (strbufGetChar(&row->text, i) == '\t') { ntabs++; }
 	}
 
 	// Allocate render buffer
@@ -169,6 +169,19 @@ void rowUpdate(editorContext* ctx, editorRow* row) {
 		}
 	}
 	row->dirty = false;
+}
+
+int rowCxToRx(editorContext* ctx, editorRow* row, int cx) {
+	if (!ctx || !row) { return 0; }
+
+	int rx = 0;
+	for(int i=0; i<cx; ++i) {
+		if (strbufGetChar(&row->text, i) == '\t') { 
+			rx += (ctx->settingTabStop - 1) - (rx % ctx->settingTabStop); 
+		}
+		rx++;
+	}
+	return rx;
 }
 
 void pageInit(editorPage* page) {
@@ -252,10 +265,100 @@ void pageDeleteRow(editorPage* page, int at) {
 	(void)(at);
 }
 
-void pageMoveCursor(editorPage* page, int dir, int num) {
+void pageMoveCursor(editorContext* ctx, editorPage* page, int dir, int num) {
 	(void)(page);
 	(void)(dir);
 	(void)(num);
+	editorRow* currRow = (page->cy >= page->numRows) ? NULL : &page->rows[page->cy];
+	editorRow* nextRow = currRow;
+
+	switch(dir) {
+		case ED_DOWN:
+			if (page->cy < page->numRows) { 
+				// Correct for tabs
+				nextRow = (page->cy + 1 >= page->numRows) ? NULL : &page->rows[page->cy + 1];
+				if (nextRow && page->cx > 0) {
+					int currTabs = 0;
+					for(int i=0; i<page->cx; ++i) {
+						if (strbufGetChar(&currRow->text, i) == '\t') { currTabs++; }
+					}
+					int nextTabs = 0;
+					for(int i=0; i<page->cx; ++i) {
+						if (strbufGetChar(&nextRow->text, i) == '\t') { nextTabs++; }
+					}
+					if (currTabs != nextTabs) {
+						int currRx = rowCxToRx(ctx, currRow, page->cx);
+						int nextRx = 0;
+						int nextCx = 0;
+						for(; nextCx<page->cx && nextRx < currRx; ++nextCx) {
+							if (strbufGetChar(&nextRow->text, nextCx) == '\t') { nextRx += (ctx->settingTabStop - 1); }
+							nextRx++;
+						}
+						if (strbufGetChar(&nextRow->text, nextCx - 1) == '\t') {
+							page->cx = nextCx - 1;
+						} else {
+							page->cx -= (nextTabs - currTabs) * (ctx->settingTabStop - 1);
+						}
+					}
+				}
+
+				// Move line
+				page->cy++; 
+			}
+		break;
+		case ED_UP:
+			if (page->cy != 0) { 
+				// Correct for tabs
+				nextRow = (page->cy - 1 >= page->numRows) ? NULL : &page->rows[page->cy - 1];
+				if (nextRow && page->cx > 0) {
+					int currTabs = 0;
+					for(int i=0; i<page->cx; ++i) {
+						if (strbufGetChar(&currRow->text, i) == '\t') { currTabs++; }
+					}
+					int nextTabs = 0;
+					for(int i=0; i<page->cx; ++i) {
+						if (strbufGetChar(&nextRow->text, i) == '\t') { nextTabs++; }
+					}
+					if (currTabs != nextTabs) {
+						int currRx = rowCxToRx(ctx, currRow, page->cx);
+						int nextRx = 0;
+						int nextCx = 0;
+						for(; nextCx<page->cx && nextRx < currRx; ++nextCx) {
+							if (strbufGetChar(&nextRow->text, nextCx) == '\t') { nextRx += (ctx->settingTabStop - 1); }
+							nextRx++;
+						}
+						if (strbufGetChar(&nextRow->text, nextCx - 1) == '\t') {
+							page->cx = nextCx - 1;
+						} else {
+							page->cx -= (nextTabs - currTabs) * (ctx->settingTabStop - 1);
+						}
+					}
+				}
+				
+				// Move line
+				page->cy--; 
+			}
+		break;
+		case ED_LEFT:
+			if (page->cx != 0) { page->cx--; }
+			else if (page->cy > 0) {
+				page->cy--;
+				page->cx = page->rows[page->cy].text.size;
+			}
+		break;
+		case ED_RIGHT:
+			if (currRow && (unsigned int)(page->cx) < currRow->text.size) { page->cx++; }
+			else if (currRow && (unsigned int)(page->cx) == currRow->text.size) {
+				page->cy++;
+				page->cx = 0;
+			}
+		break;
+	}
+
+	// Snap cursor to line endings
+	currRow = (page->cy >= page->numRows) ? NULL : &page->rows[page->cy];
+	int rowLen = currRow ? currRow->text.size : 0;
+	if (page->cx > rowLen) { page->cx = rowLen; }
 }
 
 void pageSetCursorRow(editorPage* page, int at) {
@@ -327,15 +430,11 @@ void editorPrint(editorContext* ctx) {
 
 	// Calculate rendered cursor position
 	editorPage* currPage = EDITOR_CURR_PAGE(ctx);
-	currPage->rx = 0;
 	if (currPage->cy < currPage->numRows) {
 		editorRow* row = &currPage->rows[currPage->cy];
-		for(int i=0; i<currPage->cx; ++i) {
-			if (strbufGetChar(&row->text, i) == '\t') { 
-				currPage->rx += (ctx->settingTabStop - 1) - (currPage->rx % ctx->settingTabStop); 
-			}
-			currPage->rx++;
-		}
+		currPage->rx = rowCxToRx(ctx, row, currPage->cx);
+	} else { 
+		currPage->rx = 0; 
 	}
 	currPage->ry = currPage->cy + NEO_HEADER;
 
@@ -347,7 +446,6 @@ void editorPrint(editorContext* ctx) {
 
 	// Write file bar
 	move(0, 0);
-	clear();
 	attron(A_UNDERLINE); printw("F"); attroff(A_UNDERLINE); printw("ile    ");
 	attron(A_UNDERLINE); printw("E"); attroff(A_UNDERLINE); printw("dit    ");
 	attron(A_UNDERLINE); printw("H"); attroff(A_UNDERLINE); printw("elp\n");
@@ -434,7 +532,7 @@ void editorPrint(editorContext* ctx) {
 			int len = row->rtext.size - currPage->colOff;
 			if (len < 0) { len = 0; }
 			if (len > ctx->screenCols) { len = ctx->screenCols; }
-			addnstr(row->rtext.data, len);
+			addnstr(row->rtext.data + currPage->colOff, len);
 			if (len < ctx->screenCols) { addch('\n'); }
 		}
 	}
@@ -443,7 +541,7 @@ void editorPrint(editorContext* ctx) {
 	attron(A_REVERSE);
 	addstr(ctx->statusMsg);
 	int statusIdx = strlen(ctx->statusMsg);
-	char linePos[32];
+	char linePos[128];
 	int lineLen = snprintf(linePos, sizeof(linePos), "Ln %d, Col %d", currPage->cy + 1, currPage->rx + 1);
 	for(int i=statusIdx; i<ctx->screenCols - lineLen; ++i) { 
 		addch(' '); 
@@ -456,8 +554,17 @@ void editorPrint(editorContext* ctx) {
 }
 
 void editorHandleInput(editorContext* ctx, int key) {
-	(void)(ctx);
-	(void)(key);
+	editorPage* page = EDITOR_CURR_PAGE(ctx);
+	switch(ctx->state) {
+		case ES_OPEN:
+			switch(key) {
+				case KEY_LEFT: pageMoveCursor(ctx, page, ED_LEFT, 1); break;
+				case KEY_RIGHT: pageMoveCursor(ctx, page, ED_RIGHT, 1); break;
+				case KEY_UP: pageMoveCursor(ctx, page, ED_UP, 1); break;
+				case KEY_DOWN: pageMoveCursor(ctx, page, ED_DOWN, 1); break;
+			}
+		break;
+	}
 }
 
 void editorOpenPage(editorContext* ctx, char* filename) {

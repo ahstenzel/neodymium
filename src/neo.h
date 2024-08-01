@@ -166,6 +166,13 @@ void rowClear(editorRow* row);
 /// @param row Row pointer
 void rowUpdate(editorContext* ctx, editorRow* row);
 
+/// @brief Calculate the rendered cursor position based on it's current position.
+/// @param ctx Render context pointer
+/// @param row Row pointer
+/// @param cx Cursor X position
+/// @return Rendered X position
+int rowCxToRx(editorContext* ctx, editorRow* row, int cx);
+
 
 
 /// @brief Initialize a page structure.
@@ -198,10 +205,11 @@ void pageInsertRow(editorPage* page, int at, char* str, unsigned int len);
 void pageDeleteRow(editorPage* page, int at);
 
 /// @brief Move the cursor on the page by a relative amount.
+/// @param ctx Editor context pointer
 /// @param page Page pointer
 /// @param dir Direction to move in
 /// @param num Number of spaces to move
-void pageMoveCursor(editorPage* page, int dir, int num);
+void pageMoveCursor(editorContext* ctx, editorPage* page, int dir, int num);
 
 /// @brief Set the cursor row on the page.
 /// @param page Page pointer
