@@ -266,99 +266,100 @@ void pageDeleteRow(editorPage* page, int at) {
 }
 
 void pageMoveCursor(editorContext* ctx, editorPage* page, int dir, int num) {
-	(void)(page);
-	(void)(dir);
-	(void)(num);
-	editorRow* currRow = (page->cy >= page->numRows) ? NULL : &page->rows[page->cy];
-	editorRow* nextRow = currRow;
+	for(int r=0; r<num; ++r) {
+		editorRow* currRow = (page->cy >= page->numRows) ? NULL : &page->rows[page->cy];
+		editorRow* nextRow = currRow;
 
-	switch(dir) {
-		case ED_DOWN:
-			if (page->cy < page->numRows) { 
-				// Correct for tabs
-				nextRow = (page->cy + 1 >= page->numRows) ? NULL : &page->rows[page->cy + 1];
-				if (nextRow && page->cx > 0) {
-					int currTabs = 0;
-					for(int i=0; i<page->cx; ++i) {
-						if (strbufGetChar(&currRow->text, i) == '\t') { currTabs++; }
-					}
-					int nextTabs = 0;
-					for(int i=0; i<page->cx; ++i) {
-						if (strbufGetChar(&nextRow->text, i) == '\t') { nextTabs++; }
-					}
-					if (currTabs != nextTabs) {
-						int currRx = rowCxToRx(ctx, currRow, page->cx);
-						int nextRx = 0;
-						int nextCx = 0;
-						for(; nextCx<page->cx && nextRx < currRx; ++nextCx) {
-							if (strbufGetChar(&nextRow->text, nextCx) == '\t') { nextRx += (ctx->settingTabStop - 1); }
-							nextRx++;
+		// Move cursor
+		switch(dir) {
+			case ED_DOWN: {
+				if (page->cy < page->numRows) { 
+					// Correct for tabs
+					nextRow = (page->cy + 1 >= page->numRows) ? NULL : &page->rows[page->cy + 1];
+					if (nextRow && page->cx > 0) {
+						int currTabs = 0;
+						for(int i=0; i<page->cx; ++i) {
+							if (strbufGetChar(&currRow->text, i) == '\t') { currTabs++; }
 						}
-						if (strbufGetChar(&nextRow->text, nextCx - 1) == '\t') {
-							page->cx = nextCx - 1;
-						} else {
-							page->cx -= (nextTabs - currTabs) * (ctx->settingTabStop - 1);
+						int nextTabs = 0;
+						for(int i=0; i<page->cx; ++i) {
+							if (strbufGetChar(&nextRow->text, i) == '\t') { nextTabs++; }
+						}
+						if (currTabs != nextTabs) {
+							int currRx = rowCxToRx(ctx, currRow, page->cx);
+							int nextRx = 0;
+							int nextCx = 0;
+							for(; nextCx<page->cx && nextRx < currRx; ++nextCx) {
+								if (strbufGetChar(&nextRow->text, nextCx) == '\t') { nextRx += (ctx->settingTabStop - 1); }
+								nextRx++;
+							}
+							if (strbufGetChar(&nextRow->text, nextCx - 1) == '\t') {
+								page->cx = nextCx - 1;
+							} else {
+								page->cx -= (nextTabs - currTabs) * (ctx->settingTabStop - 1);
+							}
 						}
 					}
-				}
 
-				// Move line
-				page->cy++; 
-			}
-		break;
-		case ED_UP:
-			if (page->cy != 0) { 
-				// Correct for tabs
-				nextRow = (page->cy - 1 >= page->numRows) ? NULL : &page->rows[page->cy - 1];
-				if (nextRow && page->cx > 0) {
-					int currTabs = 0;
-					for(int i=0; i<page->cx; ++i) {
-						if (strbufGetChar(&currRow->text, i) == '\t') { currTabs++; }
-					}
-					int nextTabs = 0;
-					for(int i=0; i<page->cx; ++i) {
-						if (strbufGetChar(&nextRow->text, i) == '\t') { nextTabs++; }
-					}
-					if (currTabs != nextTabs) {
-						int currRx = rowCxToRx(ctx, currRow, page->cx);
-						int nextRx = 0;
-						int nextCx = 0;
-						for(; nextCx<page->cx && nextRx < currRx; ++nextCx) {
-							if (strbufGetChar(&nextRow->text, nextCx) == '\t') { nextRx += (ctx->settingTabStop - 1); }
-							nextRx++;
-						}
-						if (strbufGetChar(&nextRow->text, nextCx - 1) == '\t') {
-							page->cx = nextCx - 1;
-						} else {
-							page->cx -= (nextTabs - currTabs) * (ctx->settingTabStop - 1);
-						}
-					}
+					// Move line
+					page->cy++; 
 				}
-				
-				// Move line
-				page->cy--; 
-			}
-		break;
-		case ED_LEFT:
-			if (page->cx != 0) { page->cx--; }
-			else if (page->cy > 0) {
-				page->cy--;
-				page->cx = page->rows[page->cy].text.size;
-			}
-		break;
-		case ED_RIGHT:
-			if (currRow && (unsigned int)(page->cx) < currRow->text.size) { page->cx++; }
-			else if (currRow && (unsigned int)(page->cx) == currRow->text.size) {
-				page->cy++;
-				page->cx = 0;
-			}
-		break;
+			} break;
+			case ED_UP: {
+				if (page->cy != 0) { 
+					// Correct for tabs
+					nextRow = (page->cy - 1 >= page->numRows) ? NULL : &page->rows[page->cy - 1];
+					if (nextRow && page->cx > 0) {
+						int currTabs = 0;
+						for(int i=0; i<page->cx; ++i) {
+							if (strbufGetChar(&currRow->text, i) == '\t') { currTabs++; }
+						}
+						int nextTabs = 0;
+						for(int i=0; i<page->cx; ++i) {
+							if (strbufGetChar(&nextRow->text, i) == '\t') { nextTabs++; }
+						}
+						if (currTabs != nextTabs) {
+							int currRx = rowCxToRx(ctx, currRow, page->cx);
+							int nextRx = 0;
+							int nextCx = 0;
+							for(; nextCx<page->cx && nextRx < currRx; ++nextCx) {
+								if (strbufGetChar(&nextRow->text, nextCx) == '\t') { nextRx += (ctx->settingTabStop - 1); }
+								nextRx++;
+							}
+							if (strbufGetChar(&nextRow->text, nextCx - 1) == '\t') {
+								page->cx = nextCx - 1;
+							} else {
+								page->cx -= (nextTabs - currTabs) * (ctx->settingTabStop - 1);
+							}
+						}
+					}
+					
+					// Move line
+					page->cy--; 
+				}
+			} break;
+			case ED_LEFT: {
+				if (page->cx != 0) { page->cx--; }
+				else if (page->cy > 0) {
+					page->cy--;
+					page->cx = page->rows[page->cy].text.size;
+					nextRow = (page->cy - 1 >= page->numRows) ? NULL : &page->rows[page->cy - 1];
+				}
+			} break;
+			case ED_RIGHT: {
+				if (currRow && (unsigned int)(page->cx) < currRow->text.size) { page->cx++; }
+				else if (currRow && (unsigned int)(page->cx) == currRow->text.size) {
+					page->cy++;
+					page->cx = 0;
+					nextRow = (page->cy + 1 >= page->numRows) ? NULL : &page->rows[page->cy + 1];
+				}
+			} break;
+		}
+
+		// Snap cursor to line endings
+		int rowLen = nextRow ? nextRow->text.size : 0;
+		if (page->cx > rowLen) { page->cx = rowLen; }
 	}
-
-	// Snap cursor to line endings
-	currRow = (page->cy >= page->numRows) ? NULL : &page->rows[page->cy];
-	int rowLen = currRow ? currRow->text.size : 0;
-	if (page->cx > rowLen) { page->cx = rowLen; }
 }
 
 void pageSetCursorRow(editorPage* page, int at) {
@@ -556,14 +557,23 @@ void editorPrint(editorContext* ctx) {
 void editorHandleInput(editorContext* ctx, int key) {
 	editorPage* page = EDITOR_CURR_PAGE(ctx);
 	switch(ctx->state) {
-		case ES_OPEN:
+		case ES_OPEN: {
 			switch(key) {
 				case KEY_LEFT: pageMoveCursor(ctx, page, ED_LEFT, 1); break;
 				case KEY_RIGHT: pageMoveCursor(ctx, page, ED_RIGHT, 1); break;
 				case KEY_UP: pageMoveCursor(ctx, page, ED_UP, 1); break;
 				case KEY_DOWN: pageMoveCursor(ctx, page, ED_DOWN, 1); break;
+				case KEY_PPAGE: pageMoveCursor(ctx, page, ED_UP, ctx->screenRows); break;
+				case KEY_NPAGE: pageMoveCursor(ctx, page, ED_DOWN, ctx->screenRows); break;
+				case KEY_HOME: {
+					page->cx = 0;
+				} break;
+				case KEY_END: {
+					editorRow* row = (page->cy >= page->numRows) ? NULL : &page->rows[page->cy];
+					page->cx = (!row) ? 0 : row->text.size; 
+				} break;
 			}
-		break;
+		} break;
 	}
 }
 
