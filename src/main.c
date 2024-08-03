@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Event loop
-	editorSetMessage(ctx, "Hello world!");
+	editorSetMessage(ctx, "Ctrl-F: File Menu | Ctrl-E: Edit Menu | Ctrl-H: Help Menu");
 	while(editorGetState(ctx) != ES_SHOULD_CLOSE) {
 		editorUpdate(ctx);
 		editorPrint(ctx);
