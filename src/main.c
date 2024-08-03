@@ -6,6 +6,12 @@
 #include "neo.h"
 
 int main(int argc, char* argv[]) {
+	// Register signal handlers
+	struct sigaction sa;
+	sa.sa_handler = signalHandler;
+	sigemptyset(&sa.sa_mask);
+	if (sigaction(SIGWINCH, &sa, NULL) == -1) { return 1; }
+
 	// Initialize ncurses
 	cursesInit();
 
@@ -25,6 +31,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Event loop
+	editorSetMessage(ctx, "Hello world!");
 	while(editorGetState(ctx) != ES_SHOULD_CLOSE) {
 		editorUpdate(ctx);
 		editorPrint(ctx);

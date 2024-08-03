@@ -4,8 +4,17 @@ void cursesInit() {
 	initscr();
 	noecho();
 	cbreak();
+	raw();
 	keypad(stdscr, true);
 }
+
+void signalHandler(int sig) {
+	switch(sig) {
+		case SIGWINCH: _neo_flag_resized = true; break;
+	}
+}
+
+bool _neo_flag_resized = false;
 
 void strbufInit(strbuf* buf, unsigned int capacity) {
 	if (!buf) { return; }
@@ -82,10 +91,10 @@ void strbufSet(strbuf* buf, const char* str, unsigned int len, unsigned int at) 
 
 	// Overwrite data
 	memcpy(&buf->data[at], str, len);
-	if (at + len > buf->size) { 
-		buf->size += (at + len) - buf->size; 
+	if (at + len > buf->size + 1) { 
+		buf->size += (at + len) - buf->size - 1; 
+		buf->data[buf->size] = '\0';
 	}
-	buf->data[buf->size] = '\0';
 }
 
 void strbufAddChar(strbuf* buf, char c) {
@@ -127,6 +136,11 @@ void strbufGrow(strbuf* buf, unsigned int min_size) {
 	if (!newData) { return; }
 	buf->data = newData;
 	buf->capacity = newCapacity;
+}
+
+int strbufLength(strbuf* buf) {
+	if (!buf) { return 0; }
+	return strlen(buf->data);
 }
 
 void rowInit(editorRow* row) {
@@ -372,8 +386,20 @@ void pageSetCursorCol(editorPage* page, int at) {
 	(void)(at);
 }
 
-void pageSave(editorPage* page) {
+void pageSave(editorContext* ctx, editorPage* page) {
+	(void)(ctx);
 	(void)(page);
+	/*
+	if (!page->filename) {
+				editorSetPage(ctx, at);
+				char* filename = editorPrompt(ctx, "File name: %s");
+				if (filename) {
+					page->filename = strdup(filename);
+					free(filename);
+					pageSave(ctx, page);
+				}
+			} else {
+	*/
 }
 
 void editorInit(editorContext* ctx) {
@@ -388,6 +414,7 @@ void editorInit(editorContext* ctx) {
 	getmaxyx(stdscr, ctx->screenRows, ctx->screenCols);
 	ctx->screenRows -= (NEO_HEADER + NEO_FOOTER);
 	ctx->state = ES_OPEN;
+	ctx->pageOff = 0;
 	ctx->settingTabStop = 4;
 }
 
@@ -414,9 +441,6 @@ void editorGrowPages(editorContext* ctx) {
 	int newSize = (ctx->maxPages == 0) ? 1 : (ctx->maxPages * 2);
 	editorPage* newPages = realloc(ctx->pages, newSize * sizeof(*newPages));
 	if (!newPages) { return; }
-	for(int i=ctx->numPages; i<newSize; ++i) { 
-		pageInit(&newPages[i]); 
-	}
 	ctx->pages = newPages;
 	ctx->maxPages = newSize;
 }
@@ -452,75 +476,96 @@ void editorPrint(editorContext* ctx) {
 	attron(A_UNDERLINE); printw("H"); attroff(A_UNDERLINE); printw("elp\n");
 
 	// Calculate page tab scroll
-	int pageIdx = 0;
+	int firstPageIdx = 0;
 	int total = 0;
-	for(int i=1; i<ctx->numPages; ++i) {
-		editorPage* lastPage = &ctx->pages[i - 1];
-		if (lastPage->filename) { 
-			total += strlen(lastPage->filename) + 3; 
+	for(int i=0; i<=ctx->currPage; ++i) {
+		editorPage* page = &ctx->pages[i];
+		if (page->filename) { 
+			total += strlen(page->filename) + 3; 
 		} else { 
 			total += 13; 
 		}
-		if (total >= (ctx->screenCols / 2)) {
-			total = 3;
-			pageIdx++;
+		if (total > ctx->screenCols - 3) {
+			editorPage* firstPage = &ctx->pages[firstPageIdx];
+			if (firstPage->filename) { 
+				total -= strlen(firstPage->filename) + 3; 
+			} else { 
+				total -= 13; 
+			}
+			firstPageIdx++;
 		}
 	}
 
-	// Write page tabs
-	attron(A_REVERSE);
-	int charIdx = 0;
-	while(charIdx < ctx->screenCols) {
+	// Render full page line
+	strbuf pageLine;
+	strbufInit(&pageLine, ctx->screenCols);
+	for(int pageIdx=0; pageIdx<ctx->numPages; ++pageIdx) {
 		editorPage* page = &ctx->pages[pageIdx];
+		if (!page) { continue; }
 
-		// Write start of line
-		if (pageIdx > 0 && charIdx == 0) {
-			charIdx += 3;
-			addstr("< |");
-		}
-
-		// Write filename
-		if (pageIdx == ctx->currPage) { 
-			attron(A_UNDERLINE | A_STANDOUT); 
-		}
-		if (page->flags & EF_DIRTY) { 
-			charIdx++;
-			addch('*'); 
-		}
-		if (!page->filename) { 
-			charIdx += 10;
-			addnstr("<untitled>", ctx->screenCols - charIdx - 2); 
-		} else { 
-			charIdx += strlen(page->filename);
-			addnstr(page->filename, ctx->screenCols - charIdx - 2);
-		}
-
-		// Write end of line
-		if (ctx->screenCols - charIdx < 2) {
-			attroff(A_STANDOUT | A_UNDERLINE);
-			while(ctx->screenCols - charIdx < 5) { 
-				delch(); 
-				charIdx--;
-			}
-			charIdx += 5;
-			addstr("... >");
+		// Draw filename & decoration
+		if (pageIdx == ctx->currPage) {
+			strbufAddChar(&pageLine, '|');
 		} else {
-			charIdx += 2;
-			addch(' ');
-			if (pageIdx == ctx->currPage) { attroff(A_UNDERLINE | A_STANDOUT); }
-			addch('|');
+			strbufAddChar(&pageLine, ' ');
 		}
 
-		// Fill spaces
-		pageIdx++;
-		if (pageIdx >= ctx->numPages) {
-			while(charIdx < ctx->screenCols) {
-				charIdx++;
-				addch(' ');
+		if (page->flags & EF_DIRTY) {
+			strbufAddChar(&pageLine, '*');
+		}
+		int segmentLen = 0;
+		if (page->filename) {
+			segmentLen = strlen(page->filename);
+			strbufAppend(&pageLine, page->filename, segmentLen);
+		} else {
+			segmentLen = 10;
+			strbufAppend(&pageLine, "<untitled>", segmentLen);
+		}
+		if (pageIdx == ctx->currPage) {
+			strbufAddChar(&pageLine, '|');
+		} else {
+			strbufAddChar(&pageLine, ' ');
+		}
+		if (page->flags & EF_DIRTY)	{
+			segmentLen++;
+		}
+		segmentLen += 2;
+
+		// Scroll page offset
+		if (pageIdx == ctx->currPage) {
+			if (strbufLength(&pageLine) - segmentLen < ctx->pageOff + 5 && ctx->pageOff > 0) {
+				ctx->pageOff = strbufLength(&pageLine) - segmentLen - 5;
+			} else if (strbufLength(&pageLine) - ctx->pageOff > ctx->screenCols - 5) {
+				ctx->pageOff = (strbufLength(&pageLine) - ctx->screenCols) + 5;
 			}
 		}
+	}
+	if (ctx->pageOff < 0) { 
+		ctx->pageOff = 0; 
+	}
+	if ((ctx->pageOff + ctx->screenCols) > strbufLength(&pageLine) && strbufLength(&pageLine) > ctx->screenCols) {
+		ctx->pageOff = strbufLength(&pageLine) - ctx->screenCols;
+	}
+	
+
+	// Add scroll markers on either side
+	if (ctx->pageOff > 0) {
+		strbufSet(&pageLine, "< ...", 5, ctx->pageOff);
+	}
+	if (ctx->pageOff + ctx->screenCols < strbufLength(&pageLine)) {
+		strbufSet(&pageLine, "... >", 5, ctx->pageOff + ctx->screenCols - 5);
+	}
+
+	// Trim page line to screen width
+	attron(A_REVERSE);
+	addnstr(&pageLine.data[ctx->pageOff], ctx->screenCols);
+	int drawLen = strbufLength(&pageLine) - ctx->pageOff;
+	while(drawLen < ctx->screenCols) {
+		addch('-');
+		drawLen++;
 	}
 	attroff(A_REVERSE);
+	strbufClear(&pageLine);
 
 	// Write page
 	for(int i=0; i<ctx->screenRows; ++i) {
@@ -538,13 +583,19 @@ void editorPrint(editorContext* ctx) {
 		}
 	}
 
-	// Write status bar
+	// Write status message
 	attron(A_REVERSE);
-	addstr(ctx->statusMsg);
-	int statusIdx = strlen(ctx->statusMsg);
-	char linePos[128];
-	int lineLen = snprintf(linePos, sizeof(linePos), "Ln %d, Col %d", currPage->cy + 1, currPage->rx + 1);
-	for(int i=statusIdx; i<ctx->screenCols - lineLen; ++i) { 
+	int statusLen = strlen(ctx->statusMsg);
+	if (statusLen > 0 && time(NULL) - ctx->statusMsgTime < 5) {
+		addstr(ctx->statusMsg);
+	} else {
+		statusLen = 0;
+	}
+
+	// Write cursor position
+	char linePos[32];
+	int lineLen = snprintf(linePos, sizeof(linePos), "(%d, %d/%d) Ln %d, Col %d", ctx->pageOff, ctx->currPage, ctx->numPages - 1, currPage->cy + 1, currPage->rx + 1);
+	for(int i=statusLen; i<ctx->screenCols - lineLen; ++i) { 
 		addch(' '); 
 	}
 	addstr(linePos);
@@ -555,6 +606,8 @@ void editorPrint(editorContext* ctx) {
 }
 
 void editorHandleInput(editorContext* ctx, int key) {
+	if (!ctx) { return; }
+
 	editorPage* page = EDITOR_CURR_PAGE(ctx);
 	switch(ctx->state) {
 		case ES_OPEN: {
@@ -572,6 +625,35 @@ void editorHandleInput(editorContext* ctx, int key) {
 					editorRow* row = (page->cy >= page->numRows) ? NULL : &page->rows[page->cy];
 					page->cx = (!row) ? 0 : row->text.size; 
 				} break;
+				case KEY_SLEFT: {
+					ctx->currPage--;
+					if (ctx->currPage < 0) {
+						ctx->currPage = ctx->numPages - 1;
+					}
+				} break;
+				case KEY_SRIGHT: {
+					ctx->currPage++;
+					if (ctx->currPage > ctx->numPages - 1) {
+						ctx->currPage = 0;
+					}
+				} break;
+				case CTRL_KEY('q'): {
+					if (editorCloseAll(ctx)) {
+						ctx->state = ES_SHOULD_CLOSE;
+					}
+				} break;
+				case CTRL_KEY('w'): {
+					editorClosePage(ctx, ctx->currPage, true);
+					if (ctx->numPages == 0) {
+						editorOpenPage(ctx, NULL);
+					}
+				} break;
+				case CTRL_KEY('s'): {
+					pageSave(ctx, EDITOR_CURR_PAGE(ctx));
+				} break;
+				case CTRL_KEY('n'): {
+					editorOpenPage(ctx, NULL);
+				} break;
 			}
 		} break;
 	}
@@ -587,10 +669,8 @@ void editorOpenPage(editorContext* ctx, char* filename) {
 	ctx->currPage = ctx->numPages;
 	ctx->numPages++;
 	editorPage* page = EDITOR_CURR_PAGE(ctx);
-	if (!filename) { 
-		pageInsertRow(page, -1, "", 0);
-		return; 
-	}
+	pageInit(page);
+	if (!filename) { return; }
 
 	// Populate page with file contents
 	page->filename = strdup(basename(filename));
@@ -614,11 +694,112 @@ void editorOpenPage(editorContext* ctx, char* filename) {
 }
 
 void editorSetPage(editorContext* ctx, int at) {
-	if (!ctx) { return; }
-	if (at >=0 && at < ctx->numPages) { 
-		ctx->currPage = at; 
+	if (!ctx || at >= ctx->numPages) { return; }
+	
+	if (at < 0) {
+		at = ctx->numPages - 1;
 	}
-	else if (at < 0 && at >= -(ctx->numPages)) { 
-		ctx->currPage = ctx->numPages - at; 
+	ctx->currPage = at;
+}
+
+void editorSetMessage(editorContext* ctx, const char* fmt, ...) {
+	if (!ctx) { return; }
+
+	int msgLen = min(ctx->screenCols - 16, 79);
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(&ctx->statusMsg[0], msgLen, fmt, ap);
+	va_end(ap);
+	ctx->statusMsgTime = time(NULL);
+}
+
+void editorClosePage(editorContext* ctx, int at, bool save) {
+	if (!ctx || at >= ctx->numPages) { return; }
+
+	// Adjust bondaries
+	if (at < 0) { 
+		at = ctx->numPages - 1; 
+	}
+	editorPage* page = &ctx->pages[at];
+	if (page) {
+		// Ask to save
+		if (page->flags & EF_DIRTY && save) {
+			pageSave(ctx, page);
+		}
+
+		// Close page
+		pageClear(page);
+		if (at < ctx->numPages - 1) {
+			memmove(&ctx->pages[at], &ctx->pages[at + 1], (ctx->numPages - at) * sizeof(editorPage));
+		}
+		ctx->numPages--;
+		if (ctx->currPage >= ctx->numPages) {
+			ctx->currPage = ctx->numPages - 1;
+		}
+	}
+}
+
+bool editorCloseAll(editorContext* ctx) {
+	if (!ctx) { return false; }
+
+	// Check for unsaved files
+	bool save = false;
+	for(int i=0; i<ctx->numPages; ++i) {
+		editorPage* page = &ctx->pages[i];
+		if (page->flags & EF_DIRTY) {
+			save = true;
+			break;
+		}
+	}
+
+	// Ask user if they want to save
+	if (save) {
+		while (1) {
+			char* input = editorPrompt(ctx, "Save all files? (y/n/c) %s");
+			if (input) {
+				for(char* i = input; *i; ++i) { *i = tolower(*i); }
+				if (strcmp(input, "y") == 0) {
+					break;
+				} else if (strcmp(input, "n") == 0) {
+					save = false;
+					break;
+				} else if (strcmp(input, "c") == 0) {
+					return false;
+				}
+			}
+		}
+	}
+
+	// Close pages
+	while(ctx->numPages > 0) {
+		editorClosePage(ctx, 0, save);
+	}
+	return true;
+}
+
+char* editorPrompt(editorContext* ctx, const char* prompt) {
+	if (!ctx) { return NULL; }
+
+	strbuf input;
+	strbufInit(&input, 128);
+	while(1) {
+		editorSetMessage(ctx, prompt, input.data);
+		editorPrint(ctx);
+
+		int c = getch();
+		if (c == KEY_DC || c == KEY_BACKSPACE || c == CTRL_KEY('h')) {
+			strbufDelChar(&input);
+		} else if (c == CTRL_KEY('q') || c == CTRL_KEY('c')) {
+			editorSetMessage(ctx, "");
+			strbufClear(&input);
+			return NULL;
+		} else if (c == '\r' || c == KEY_ENTER) {
+			if (input.size != 0) {
+				editorSetMessage(ctx, "");
+				return input.data;
+			}
+		} else if (!iscntrl(c) && c < 128) {
+			strbufAddChar(&input, c);
+		}
 	}
 }

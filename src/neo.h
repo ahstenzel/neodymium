@@ -19,9 +19,11 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <string.h>
+#include <signal.h>
 #include <time.h>
 #include <libgen.h>
 #include <ncurses.h>
+#include <ctype.h>
 
 
 // ============================================== defines
@@ -47,11 +49,16 @@ enum editorDirection {
 };
 
 
-// ============================================== curses functionality
+// ============================================== meta functionality
 
 /// @brief Initialize ncurses library.
 void cursesInit();
 
+/// @brief General signal handler.
+/// @param sig Signal id
+void signalHandler(int sig);
+
+extern bool _neo_flag_resized;
 
 // ============================================== text buffers
 
@@ -117,6 +124,11 @@ char strbufGetChar(strbuf* buf, int at);
 /// @param min_size Minimum new size the buffer should be
 void strbufGrow(strbuf* buf, unsigned int min_size);
 
+/// @brief Number of non-terminating characters in the string buffer.
+/// @param buf String buffer pointer
+/// @return String length
+int strbufLength(strbuf* buf);
+
 
 // ============================================== editor objects
 
@@ -149,6 +161,7 @@ typedef struct {
 	int currPage;
 	int screenCols, screenRows;
 	int state;
+	int pageOff;
 
 	int settingTabStop;
 } editorContext;
@@ -222,8 +235,9 @@ void pageSetCursorRow(editorPage* page, int at);
 void pageSetCursorCol(editorPage* page, int at);
 
 /// @brief Save the pages contents to file.
+/// @param ctx Context pointer
 /// @param page Page pointer
-void pageSave(editorPage* page);
+void pageSave(editorContext* ctx, editorPage* page);
 
 
 
@@ -267,9 +281,38 @@ void editorOpenPage(editorContext* ctx, char* filename);
 /// @param at Page number (or -1 for the last page)
 void editorSetPage(editorContext* ctx, int at);
 
+/// @brief Set the message displayed at the bottom of the screen.
+/// @param ctx Context pointer
+/// @param fmt Formatted message
+/// @param ... printf-style arguments
+void editorSetMessage(editorContext* ctx, const char* fmt, ...);
+
+/// @brief Close a certain page, asking if the user wants to save first.
+/// @param ctx Context pointer
+/// @param at Page number (or -1 for last page)
+/// @param save Save the page if it's not a new file
+void editorClosePage(editorContext* ctx, int at, bool save);
+
+/// @brief Close all pages and exit the program.
+/// @param ctx Context pointer
+/// @return True if pages close, False if cancelled
+bool editorCloseAll(editorContext* ctx);
+
+/// @brief Use the status bar to prompt for user input.
+/// @param ctx 
+/// @param prompt 
+/// @return 
+char* editorPrompt(editorContext* ctx, const char* prompt);
+
 
 // ============================================== functional macros
 
 #define EDITOR_CURR_PAGE(ctx) &((ctx)->pages[(ctx)->currPage])
+
+#define CTRL_KEY(x) ((x) & 0x1f)
+
+#define min(a, b) ((a) < (b)) ? (a) : (b)
+
+#define max(a, b) ((a) > (b)) ? (a) : (b)
 
 #endif // NEO_H
