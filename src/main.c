@@ -23,15 +23,14 @@ int main(int argc, char* argv[]) {
 	// Load files from command line
 	if (argc >= 2) {
 		for(int i=1; i<argc; ++i) {
-			editorOpenPage(ctx, argv[i]);
+			editorOpenPage(ctx, argv[i], -1);
 		}
 		editorSetPage(ctx, 0);
 	} else {
-		editorOpenPage(ctx, NULL);
+		editorOpenPage(ctx, NULL, -1);
 	}
 
 	// Event loop
-	editorSetMessage(ctx, "Ctrl-F: File Menu | Ctrl-E: Edit Menu | Ctrl-H: Help Menu");
 	while(editorGetState(ctx) != ES_SHOULD_CLOSE) {
 		editorUpdate(ctx);
 		editorPrint(ctx);

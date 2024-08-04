@@ -34,16 +34,17 @@
 #define NEO_FOOTER 2
 
 enum editorFlag {
-	EF_DIRTY = 0x01,		// File has been modified and should be saved before closing.
+	EF_DIRTY =    0x01,		// File has been modified and should be saved before closing.
 	EF_READONLY = 0x02		// File is marked as read-only and cannot be modified or saved.
 };
 
 enum editorState {
 	ES_OPEN = 1,			// Normal state for reading user input & drawing to the screen.
 	ES_PROMPT,				// Prompting user for input on the status bar.
-	ES_MENU_FILE,			// Selecting file menu option.
-	ES_MENU_EDIT,			// Selecting edit menu option.
-	ES_MENU_HELP,			// Selecting help menu option.
+	ES_MENU,				// Selecting an option from a menu group.
+	//ES_MENU_FILE,			// Selecting file menu option.
+	//ES_MENU_EDIT,			// Selecting edit menu option.
+	//ES_MENU_HELP,			// Selecting help menu option.
 	ES_SHOULD_CLOSE			// Editing has finished and the program should clean up & terminate.
 };
 
@@ -81,6 +82,7 @@ typedef struct {
 
 /// @brief List of menu entries.
 typedef struct {
+	char* name;
 	menuEntry* entries;
 	int numEntries;
 	int maxEntries;
@@ -201,6 +203,7 @@ typedef struct {
 /// @brief Top level container for open files and editor settings.
 typedef struct {
 	editorPage* pages;
+	menuGroup* menus;
 	char statusMsg[80];
 	time_t statusMsgTime;
 	int maxPages;
@@ -209,11 +212,9 @@ typedef struct {
 	int screenCols, screenRows;
 	int state;
 	int pageOff;
-
-	menuGroup menuFile;
-	menuGroup menuEdit;
-	menuGroup menuHelp;
 	int settingTabStop;
+	int numMenus;
+	int currMenu;
 } editorContext;
 
 /// @brief Initialize a row structure.
@@ -316,6 +317,12 @@ int editorGetState(editorContext* ctx);
 /// @param ctx Context pointer
 void editorPrint(editorContext* ctx);
 
+/// @brief Print the menu group to the screen.
+/// @param ctx Context pointer
+/// @param grp Menu group pointer
+/// @param off Horizontal offset
+void editorPrintMenu(editorContext* ctx, menuGroup* grp, int off);
+
 /// @brief Respond to keyboard input.
 /// @param ctx Context pointer
 /// @param key Keyboard code
@@ -324,7 +331,9 @@ void editorHandleInput(editorContext* ctx, int key);
 /// @brief Open a new page in the editor and make it the current page.
 /// @param ctx Context pointer
 /// @param filename File to open (or NULL for a blank page)
-void editorOpenPage(editorContext* ctx, char* filename);
+/// @param internal If filename is NULL and this is >= 0, open an internal document instead of a blank page
+/// @return True if file opened successfully
+bool editorOpenPage(editorContext* ctx, char* filename, int internal);
 
 /// @brief Set the currently visible page in the editor.
 /// @param ctx Context pointer
@@ -335,7 +344,8 @@ void editorSetPage(editorContext* ctx, int at);
 /// @param ctx Context pointer
 /// @param fmt Formatted message
 /// @param ... printf-style arguments
-void editorSetMessage(editorContext* ctx, const char* fmt, ...);
+/// @return Length of printed message
+int editorSetMessage(editorContext* ctx, const char* fmt, ...);
 
 /// @brief Close a certain page, asking if the user wants to save first.
 /// @param ctx Context pointer
@@ -360,15 +370,15 @@ void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt);
 /// @brief Callback function for the Help->About menu entry.
 void cbMenuHelpAbout(void* data, int num);
 
-/// @brief Callback function for the Help->Shortcuts menu entry.
-void cbMenuHelpShortcuts(void* data, int num);
-
-extern const char _help_shortcuts_contents[];
+extern const char _help_docs_contents[];
+extern const char _help_docs_filename[];
 
 
 // ============================================== functional macros
 
 #define EDITOR_CURR_PAGE(ctx) &((ctx)->pages[(ctx)->currPage])
+
+#define EDITOR_CURR_MENU(ctx) &((ctx)->menus[(ctx)->currMenu])
 
 #define CTRL_KEY(x) ((x) & 0x1f)
 

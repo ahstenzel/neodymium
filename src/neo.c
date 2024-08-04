@@ -22,15 +22,17 @@ void signalHandler(int sig) {
 void menuGroupInit(menuGroup* grp) {
 	if (!grp) { return; }
 
-	grp->maxEntries = 1;
+	grp->name = NULL;
+	grp->maxEntries = 0;
 	grp->numEntries = 0;
 	grp->selected = 0;
-	grp->entries = malloc(sizeof(*grp->entries));
+	grp->entries = malloc(0);
 }
 
 void menuGroupClear(menuGroup* grp) {
 	if (!grp) { return; }
 
+	free(grp->name);
 	free(grp->entries);
 	grp->entries = NULL;
 	grp->numEntries = 0;
@@ -329,7 +331,7 @@ void pageInsertRow(editorPage* page, int at, char* str, unsigned int len) {
 
 	// Update state
 	page->numRows++;
-	if (PAGE_FLAG_CLEAR(page, EF_READONLY)) {
+	if (PAGE_FLAG_ISCLEAR(page, EF_READONLY)) {
 		PAGE_FLAG_SET(page, EF_DIRTY);
 	}
 }
@@ -458,9 +460,19 @@ void editorInit(editorContext* ctx) {
 	ctx->screenRows -= (NEO_HEADER + NEO_FOOTER);
 	ctx->state = ES_OPEN;
 	ctx->pageOff = 0;
-	menuGroupInit(&ctx->menuFile);
-	menuGroupInit(&ctx->menuEdit);
-	menuGroupInit(&ctx->menuHelp);
+	ctx->settingTabStop = 4;
+
+	// Hard code menu groups
+	ctx->currMenu = 0;
+	ctx->numMenus = 3;
+	ctx->menus = malloc(ctx->numMenus * sizeof(*ctx->menus));
+	for(int i=0; i<ctx->numMenus; ++i) { menuGroupInit(&ctx->menus[i]); }
+	menuGroup* menuFile = &ctx->menus[0];
+	menuGroup* menuEdit = &ctx->menus[1];
+	menuGroup* menuHelp = &ctx->menus[2];
+	menuFile->name = strdup("File");
+	menuEdit->name = strdup("Edit");
+	menuHelp->name = strdup("Help");
 
 	menuEntry spacer = {
 		.name = NULL,
@@ -468,30 +480,27 @@ void editorInit(editorContext* ctx) {
 		.callback = NULL
 	};
 	menuEntry entry = { 0 };
-	entry.name = "New"; entry.shortcut = 'n'; menuGroupInsert(&ctx->menuFile, -1, entry);
-	entry.name = "Open"; entry.shortcut = 'o'; menuGroupInsert(&ctx->menuFile, -1, entry);
-	menuGroupInsert(&ctx->menuFile, -1, spacer);
-	entry.name = "Save"; entry.shortcut = 's'; menuGroupInsert(&ctx->menuFile, -1, entry);
-	entry.name = "Save All"; entry.shortcut = 'd'; menuGroupInsert(&ctx->menuFile, -1, entry);
-	menuGroupInsert(&ctx->menuFile, -1, spacer);
-	entry.name = "Next Tab"; entry.shortcut = 't'; menuGroupInsert(&ctx->menuFile, -1, entry);
-	entry.name = "Last Tab"; entry.shortcut = 'r'; menuGroupInsert(&ctx->menuFile, -1, entry);
-	entry.name = "Close Tab"; entry.shortcut = 'w'; menuGroupInsert(&ctx->menuFile, -1, entry);
-	entry.name = "Quit"; entry.shortcut = 'q'; menuGroupInsert(&ctx->menuFile, -1, entry);
+	entry.name = "New"; entry.shortcut = 'n'; menuGroupInsert(menuFile, -1, entry);
+	entry.name = "Open"; entry.shortcut = 'o'; menuGroupInsert(menuFile, -1, entry);
+	menuGroupInsert(menuFile, -1, spacer);
+	entry.name = "Save"; entry.shortcut = 's'; menuGroupInsert(menuFile, -1, entry);
+	entry.name = "Save All"; entry.shortcut = 'd'; menuGroupInsert(menuFile, -1, entry);
+	menuGroupInsert(menuFile, -1, spacer);
+	entry.name = "Next Tab"; entry.shortcut = 't'; menuGroupInsert(menuFile, -1, entry);
+	entry.name = "Last Tab"; entry.shortcut = 'r'; menuGroupInsert(menuFile, -1, entry);
+	entry.name = "Close Tab"; entry.shortcut = 'w'; menuGroupInsert(menuFile, -1, entry);
+	entry.name = "Quit"; entry.shortcut = 'q'; menuGroupInsert(menuFile, -1, entry);
 
-	entry.name = "Cut"; entry.shortcut = 'x'; menuGroupInsert(&ctx->menuEdit, -1, entry);
-	entry.name = "Copy"; entry.shortcut = 'c'; menuGroupInsert(&ctx->menuEdit, -1, entry);
-	entry.name = "Paste"; entry.shortcut = 'v'; menuGroupInsert(&ctx->menuEdit, -1, entry);
-	menuGroupInsert(&ctx->menuEdit, -1, spacer);
-	entry.name = "Undo"; entry.shortcut = 'z'; menuGroupInsert(&ctx->menuEdit, -1, entry);
-	entry.name = "Redo"; entry.shortcut = 'y'; menuGroupInsert(&ctx->menuEdit, -1, entry);
+	entry.name = "Cut"; entry.shortcut = 'x'; menuGroupInsert(menuEdit, -1, entry);
+	entry.name = "Copy"; entry.shortcut = 'c'; menuGroupInsert(menuEdit, -1, entry);
+	entry.name = "Paste"; entry.shortcut = 'v'; menuGroupInsert(menuEdit, -1, entry);
+	menuGroupInsert(menuEdit, -1, spacer);
+	entry.name = "Undo"; entry.shortcut = 'z'; menuGroupInsert(menuEdit, -1, entry);
+	entry.name = "Redo"; entry.shortcut = 'y'; menuGroupInsert(menuEdit, -1, entry);
 
-	entry.name = "About"; entry.shortcut = '\0'; entry.callback = cbMenuHelpAbout; 
-	menuGroupInsert(&ctx->menuHelp, -1, entry);
-	entry.name = "Shortcuts"; entry.shortcut = '\0'; entry.callback = cbMenuHelpShortcuts; 
-	menuGroupInsert(&ctx->menuHelp, -1, entry);
-
-	ctx->settingTabStop = 4;
+	entry.name = "Docs"; entry.shortcut = '1'; menuGroupInsert(menuHelp, -1, entry);
+	menuGroupInsert(menuHelp, -1, spacer);
+	entry.name = "About"; entry.shortcut = '\0'; entry.callback = cbMenuHelpAbout; menuGroupInsert(menuHelp, -1, entry);
 }
 
 void editorClear(editorContext* ctx) {
@@ -500,10 +509,11 @@ void editorClear(editorContext* ctx) {
 	for(int i=0; i<ctx->numPages; ++i) { 
 		pageClear(&ctx->pages[i]); 
 	}
+	for(int i=0; i<ctx->numMenus; ++i) {
+		menuGroupClear(&ctx->menus[i]);
+	}
 	free(ctx->pages);
-	menuGroupClear(&ctx->menuFile);
-	menuGroupClear(&ctx->menuEdit);
-	menuGroupClear(&ctx->menuHelp);
+	free(ctx->menus);
 }
 
 void editorUpdate(editorContext* ctx) {
@@ -667,130 +677,103 @@ void editorPrint(editorContext* ctx) {
 	attroff(A_REVERSE);
 
 	// Write bottom bar
-	
+	char fileInfo[32];
+	int infoLen = snprintf(
+		fileInfo, sizeof(fileInfo), "| Lines: %d%s", 
+		currPage->numRows,
+		PAGE_FLAG_ISSET(currPage, EF_READONLY) ? " (READ-ONLY)" : ""
+	);
+	int fullFilenameDraw = 0;
+	int fullFilenameOff = 0;
+	int fullFilenameLen = 0;
+	if (currPage->fullFilename) {
+		fullFilenameLen = strlen(currPage->fullFilename);
+		if (fullFilenameLen > ctx->screenCols - infoLen) {
+			fullFilenameOff = ctx->screenCols - infoLen;
+		}
+		fullFilenameDraw += fullFilenameLen - fullFilenameOff;
+		addnstr(&currPage->fullFilename[fullFilenameOff], fullFilenameDraw);
+	}
+	for(int i=fullFilenameDraw; i<ctx->screenCols - infoLen; ++i) {
+		addch(' ');
+	}
+	addnstr(fileInfo, infoLen);
 
 	// Write file bar
-	curs_set(1);
 	move(0, 0);
-	if (ctx->state == ES_MENU_FILE) {
-		curs_set(0);
-		attron(A_REVERSE);
-		attron(A_UNDERLINE); printw("F"); attroff(A_UNDERLINE); printw("ile    ");
-		attroff(A_REVERSE);
-		attron(A_UNDERLINE); printw("E"); attroff(A_UNDERLINE); printw("dit    ");
-		attron(A_UNDERLINE); printw("H"); attroff(A_UNDERLINE); printw("elp");
-
-		attron(A_REVERSE);
-		move(1, 0);
-		printw(",__________________,");
-		int i=0;
-		for(; i<ctx->menuFile.numEntries; ++i) {
-			move(i + 2, 0);
-			menuEntry entry = ctx->menuFile.entries[i];
-			if (!entry.name) {
-				printw("|__________________|");
-			} else {
-				addch('|');
-				if (ctx->menuFile.selected == i) { attroff(A_REVERSE); }
-				int len = strlen(entry.name);
-				addstr(entry.name);
-				while(len < 10) { addch(' '); len++; }
-				if (entry.shortcut != '\0') {
-					addstr("(Ctrl-");
-					addch(toupper(entry.shortcut));
-					addch(')');
-				} else {
-					printw("        ");
-				}
-				if (ctx->menuFile.selected == i) { attron(A_REVERSE); }
-				addch('|');
-			}
+	for(int i=0; i<ctx->numMenus; ++i) {
+		menuGroup* menu = &ctx->menus[i];
+		if (!menu->name) { continue; }
+		if (ctx->state == ES_MENU && i == ctx->currMenu) { 
+			attron(A_REVERSE); 
 		}
-		move(i + 2, 0);
-		printw("|__________________|");
-		attroff(A_REVERSE);
-	} else if (ctx->state == ES_MENU_EDIT) {
-		curs_set(0);
-		attron(A_UNDERLINE); printw("F"); attroff(A_UNDERLINE); printw("ile    ");
-		attron(A_REVERSE);
-		attron(A_UNDERLINE); printw("E"); attroff(A_UNDERLINE); printw("dit    ");
-		attroff(A_REVERSE);
-		attron(A_UNDERLINE); printw("H"); attroff(A_UNDERLINE); printw("elp");
-
-		attron(A_REVERSE);
-		move(1, 8);
-		printw(",__________________,");
-		int i=0;
-		for(; i<ctx->menuEdit.numEntries; ++i) {
-			move(i + 2, 8);
-			menuEntry entry = ctx->menuEdit.entries[i];
-			if (!entry.name) {
-				printw("|__________________|");
-			} else {
-				addch('|');
-				if (ctx->menuEdit.selected == i) { attroff(A_REVERSE); }
-				int len = strlen(entry.name);
-				addstr(entry.name);
-				while(len < 10) { addch(' '); len++; }
-				if (entry.shortcut != '\0') {
-					addstr("(Ctrl-");
-					addch(toupper(entry.shortcut));
-					addch(')');
-				} else {
-					printw("        ");
-				}
-				if (ctx->menuEdit.selected == i) { attron(A_REVERSE); }
-				addch('|');
-			}
+		attron(A_UNDERLINE); 
+		addch(menu->name[0]);
+		attroff(A_UNDERLINE);
+		if (strlen(menu->name) > 1) {
+			addnstr(&menu->name[1], 7);
 		}
-		move(i + 2, 8);
-		printw("|__________________|");
-		attroff(A_REVERSE);
-	} else if (ctx->state == ES_MENU_HELP) {
-		curs_set(0);
-		attron(A_UNDERLINE); printw("F"); attroff(A_UNDERLINE); printw("ile    ");
-		attron(A_UNDERLINE); printw("E"); attroff(A_UNDERLINE); printw("dit    ");
-		attron(A_REVERSE);
-		attron(A_UNDERLINE); printw("H"); attroff(A_UNDERLINE); printw("elp");
-		attroff(A_REVERSE);
-
-		attron(A_REVERSE);
-		move(1, 16);
-		printw(",__________________,");
-		int i=0;
-		for(; i<ctx->menuHelp.numEntries; ++i) {
-			move(i + 2, 16);
-			menuEntry entry = ctx->menuHelp.entries[i];
-			if (!entry.name) {
-				printw("|__________________|");
-			} else {
-				addch('|');
-				if (ctx->menuHelp.selected == i) { attroff(A_REVERSE); }
-				int len = strlen(entry.name);
-				addstr(entry.name);
-				while(len < 10) { addch(' '); len++; }
-				if (entry.shortcut != '\0') {
-					addstr("(Ctrl-");
-					addch(toupper(entry.shortcut));
-					addch(')');
-				} else {
-					printw("        ");
-				}
-				if (ctx->menuHelp.selected == i) { attron(A_REVERSE); }
-				addch('|');
-			}
+		for(int i=strlen(menu->name); i<8; ++i) {
+			addch(' ');
 		}
-		move(i + 2, 16);
-		printw("|__________________|");
-		attroff(A_REVERSE);
-	} else {
-		attron(A_UNDERLINE); printw("F"); attroff(A_UNDERLINE); printw("ile    ");
-		attron(A_UNDERLINE); printw("E"); attroff(A_UNDERLINE); printw("dit    ");
-		attron(A_UNDERLINE); printw("H"); attroff(A_UNDERLINE); printw("elp\n");
+		if (ctx->state == ES_MENU && i == ctx->currMenu) { 
+			attroff(A_REVERSE); 
+		}
+	}
+	if (ctx->state == ES_MENU) {
+		editorPrintMenu(ctx, EDITOR_CURR_MENU(ctx), 8 * ctx->currMenu);
 	}
 
 	// Move cursor
+	if (ctx->state == ES_MENU) {
+		curs_set(0);
+	} else {
+		curs_set(1);
+	}
 	move(currPage->ry - currPage->rowOff, currPage->rx - currPage->colOff);
+}
+
+void editorPrintMenu(editorContext* ctx, menuGroup* grp, int off) {
+	(void)(ctx);
+	if (!ctx || !grp || off < 0) { return; }
+
+	attron(A_REVERSE);
+	move(1, off);
+	printw(",__________________,");
+	int i=0;
+	for(; i<grp->numEntries; ++i) {
+		move(i + 2, off);
+		menuEntry entry = grp->entries[i];
+		if (!entry.name) {
+			printw("|__________________|");
+		} else {
+			addch('|');
+			if (grp->selected == i) { attroff(A_REVERSE); }
+			int len = strlen(entry.name);
+			addstr(entry.name);
+			
+			if (isalnum(entry.shortcut)) {
+				if (isdigit(entry.shortcut)) {
+					while(len < 14) { addch(' '); len++; }
+					addstr("(F");
+					addch(entry.shortcut);
+					addch(')');
+				} else {
+					while(len < 10) { addch(' '); len++; }
+					addstr("(Ctrl-");
+					addch(toupper(entry.shortcut));
+					addch(')');
+				}
+			} else {
+				printw("             ");
+			}
+			if (grp->selected == i) { attron(A_REVERSE); }
+			addch('|');
+		}
+	}
+	move(i + 2, off);
+	printw("|__________________|");
+	attroff(A_REVERSE);
 }
 
 void editorHandleInput(editorContext* ctx, int key) {
@@ -825,6 +808,9 @@ void editorHandleInput(editorContext* ctx, int key) {
 				case KEY_SF: {
 					editorSetMessage(ctx, "Shift-Down");
 				} break;
+				case KEY_F(1): {
+					editorOpenPage(ctx, NULL, 0);
+				} break;
 				case CTRL_KEY('r'): {
 					ctx->currPage--;
 					if (ctx->currPage < 0) {
@@ -845,26 +831,27 @@ void editorHandleInput(editorContext* ctx, int key) {
 				case CTRL_KEY('w'): {
 					editorClosePage(ctx, ctx->currPage, true);
 					if (ctx->numPages == 0) {
-						editorOpenPage(ctx, NULL);
+						editorOpenPage(ctx, NULL, -1);
 					}
 				} break;
 				case CTRL_KEY('s'): {
 					pageSave(ctx, EDITOR_CURR_PAGE(ctx));
 				} break;
 				case CTRL_KEY('n'): {
-					editorOpenPage(ctx, NULL);
+					editorOpenPage(ctx, NULL, -1);
 				} break;
 				case CTRL_KEY('o'): {
 					strbuf input;
 					editorPrompt(ctx, &input, "Open file: %s");
 					if (input.data) {
-						if (ctx->numPages == 1) {
-							editorPage* page = EDITOR_CURR_PAGE(ctx);
-							if (!page->filename && !PAGE_FLAG_ISCLEAR(page, EF_DIRTY)) {
-								editorClosePage(ctx, ctx->currPage, false);
+						if (editorOpenPage(ctx, input.data, -1)) {
+							if (ctx->numPages == 2) {
+								editorPage* page = &ctx->pages[0];
+								if (!page->filename && PAGE_FLAG_ISCLEAR(page, EF_DIRTY)) {
+									editorClosePage(ctx, ctx->currPage, false);
+								}
 							}
 						}
-						editorOpenPage(ctx, input.data);
 						strbufClear(&input);
 					}
 				} break;
@@ -877,18 +864,36 @@ void editorHandleInput(editorContext* ctx, int key) {
 				case CTRL_KEY('v'): {
 					editorSetMessage(ctx, "Paste");
 				} break;
-				case CTRL_KEY('f'): { ctx->state = ES_MENU_FILE; } break;
-				case CTRL_KEY('e'): { ctx->state = ES_MENU_EDIT; } break;
-				case CTRL_KEY('h'): { ctx->state = ES_MENU_HELP; } break;
+				case CTRL_KEY('f'): { ctx->state = ES_MENU; ctx->currMenu = 0; } break;
+				case CTRL_KEY('e'): { ctx->state = ES_MENU; ctx->currMenu = 1; } break;
+				case CTRL_KEY('h'): { ctx->state = ES_MENU; ctx->currMenu = 2; } break;
 			}
 		} break;
-		case ES_MENU_FILE: {
-			menuGroup* menu = &ctx->menuFile;
+		case ES_MENU: {
+			menuGroup* menu = EDITOR_CURR_MENU(ctx);
 			switch(key) {
-				case CTRL_KEY('q'):
-				case CTRL_KEY('f'): { ctx->state = ES_OPEN; } break;
-				case CTRL_KEY('e'): { ctx->state = ES_MENU_EDIT; } break;
-				case CTRL_KEY('h'): { ctx->state = ES_MENU_HELP; } break;
+				case CTRL_KEY('q'): { ctx->state = ES_OPEN; } break;
+				case CTRL_KEY('f'): { 
+					if (ctx->currMenu == 0) {
+						ctx->state = ES_OPEN; 
+					} else {
+						ctx->currMenu = 0;
+					}
+				} break;
+				case CTRL_KEY('e'): { 
+					if (ctx->currMenu == 1) {
+						ctx->state = ES_OPEN; 
+					} else {
+						ctx->currMenu = 1;
+					}
+				} break;
+				case CTRL_KEY('h'): { 
+					if (ctx->currMenu == 2) {
+						ctx->state = ES_OPEN; 
+					} else {
+						ctx->currMenu = 2;
+					}
+				} break;
 				case KEY_UP: {
 					int count = 0;
 					do {
@@ -911,130 +916,78 @@ void editorHandleInput(editorContext* ctx, int key) {
 					}
 					while(!menu->entries[menu->selected].name && count < menu->numEntries);
 				} break;
-				case '\n':
-				case '\r':
-				case KEY_ENTER: {
-					ctx->state = ES_OPEN;
-					menuEntry* entry = &menu->entries[menu->selected];
-					if (entry->shortcut == '\0') {
-						entry->callback((void*)ctx, 1);
-					} else {
-						int key = CTRL_KEY(entry->shortcut);
-						editorHandleInput(ctx, key);
-					}
+				case KEY_LEFT: {
+					ctx->currMenu--;
+					if (ctx->currMenu < 0) { ctx->currMenu = ctx->numMenus - 1; }
 				} break;
-			}
-		} break;
-		case ES_MENU_EDIT: {
-			menuGroup* menu = &ctx->menuEdit;
-			switch(key) {
-				case CTRL_KEY('q'):
-				case CTRL_KEY('e'): { ctx->state = ES_OPEN; } break;
-				case CTRL_KEY('f'): { ctx->state = ES_MENU_FILE; } break;
-				case CTRL_KEY('h'): { ctx->state = ES_MENU_HELP; } break;
-				case KEY_UP: {
-					int count = 0;
-					do {
-						count++;
-						menu->selected--;
-						if (menu->selected < 0) {
-							menu->selected = menu->numEntries - 1;
-						}
-					}
-					while(!menu->entries[menu->selected].name && count < menu->numEntries);
-				} break;
-				case KEY_DOWN: {
-					int count = 0;
-					do {
-						count++;
-						menu->selected++;
-						if (menu->selected >= menu->numEntries) {
-							menu->selected = 0;
-						}
-					}
-					while(!menu->entries[menu->selected].name && count < menu->numEntries);
+				case KEY_RIGHT: {
+					ctx->currMenu++;
+					if (ctx->currMenu >= ctx->numMenus) { ctx->currMenu = 0; }
 				} break;
 				case '\n':
 				case '\r':
 				case KEY_ENTER: {
 					ctx->state = ES_OPEN;
 					menuEntry* entry = &menu->entries[menu->selected];
-					if (entry->shortcut == '\0') {
-						entry->callback((void*)ctx, 1);
-					} else {
-						int key = CTRL_KEY(entry->shortcut);
+					if (isalnum(entry->shortcut)) {
+						// Convert shortcut character to keypress value
+						int key = 0;
+						if (isdigit(entry->shortcut)) {
+							char digit[2] = "\0\0";
+							digit[0] = entry->shortcut;
+							key = KEY_F(atoi(digit));
+						} else {
+							key = CTRL_KEY(entry->shortcut);
+						}
 						editorHandleInput(ctx, key);
+					} else {
+						// Use specified callback
+						entry->callback((void*)ctx, 1);
 					}
 				} break;
 			}
 		} break;
-		case ES_MENU_HELP: {
-			menuGroup* menu = &ctx->menuHelp;
-			switch(key) {
-				case CTRL_KEY('q'):
-				case CTRL_KEY('h'): { ctx->state = ES_OPEN; } break;
-				case CTRL_KEY('e'): { ctx->state = ES_MENU_EDIT; } break;
-				case CTRL_KEY('f'): { ctx->state = ES_MENU_FILE; } break;
-				case KEY_UP: {
-					int count = 0;
-					do {
-						count++;
-						menu->selected--;
-						if (menu->selected < 0) {
-							menu->selected = menu->numEntries - 1;
-						}
-					}
-					while(!menu->entries[menu->selected].name && count < menu->numEntries);
-				} break;
-				case KEY_DOWN: {
-					int count = 0;
-					do {
-						count++;
-						menu->selected++;
-						if (menu->selected >= menu->numEntries) {
-							menu->selected = 0;
-						}
-					}
-					while(!menu->entries[menu->selected].name && count < menu->numEntries);
-				} break;
-				case '\n':
-				case '\r':
-				case KEY_ENTER: {
-					ctx->state = ES_OPEN;
-					menuEntry* entry = &menu->entries[menu->selected];
-					if (entry->shortcut == '\0') {
-						entry->callback((void*)ctx, 1);
-					} else {
-						int key = CTRL_KEY(entry->shortcut);
-						editorHandleInput(ctx, key);
-					}
-				} break;
-			}
-		} break;
+
 	}
 }
 
-void editorOpenPage(editorContext* ctx, char* filename) {
-	if (!ctx) { return; }
+bool editorOpenPage(editorContext* ctx, char* filename, int internal) {
+	if (!ctx) { return false; }
 	
 	// Resize array if necessary
 	if (ctx->numPages >= ctx->maxPages) { 
 		editorGrowPages(ctx); 
 	}
 	
-	if (!filename) {
+	if (!filename && internal < 0) {
 		// Create empty page
 		ctx->currPage = ctx->numPages;
 		ctx->numPages++;
 		editorPage* page = EDITOR_CURR_PAGE(ctx);
 		pageInit(page);
-		return;
+		return true;
 	} else {
 		// Check if file is valid
-		FILE *fp = fopen(filename, "r");
-		if (!fp) { 
-			editorSetMessage(ctx, "Failed to open file (%s)!", filename);
-			return;
+		int pageFlags = 0;
+		FILE* fp = NULL;
+		if (!filename) {
+			// Internal documents
+			pageFlags |= EF_READONLY;
+			if (internal == 0) {
+				fp = fmemopen((void*)_help_docs_contents, strlen(_help_docs_contents), "r");
+				filename = (char*)&_help_docs_filename[0];
+			}
+			if (!fp) {
+				editorSetMessage(ctx, "Failed to open internal file (%d)!", internal);
+				return false;
+			}
+		} else {
+			// External files
+			fp = fopen(filename, "r");
+			if (!fp) { 
+				editorSetMessage(ctx, "Failed to open file (%s)!", filename);
+				return false;
+			}
 		}
 
 		// Create page
@@ -1058,9 +1011,8 @@ void editorOpenPage(editorContext* ctx, char* filename) {
 		}
 		free(line);
 		fclose(fp);
-
-		// Set flags
-		PAGE_FLAG_CLEAR(page, EF_DIRTY);
+		page->flags = pageFlags;
+		return true;
 	}
 }
 
@@ -1073,8 +1025,8 @@ void editorSetPage(editorContext* ctx, int at) {
 	ctx->currPage = at;
 }
 
-void editorSetMessage(editorContext* ctx, const char* fmt, ...) {
-	if (!ctx) { return; }
+int editorSetMessage(editorContext* ctx, const char* fmt, ...) {
+	if (!ctx) { return 0; }
 
 	int msgLen = min(ctx->screenCols - 16, 79);
 	va_list ap;
@@ -1082,6 +1034,7 @@ void editorSetMessage(editorContext* ctx, const char* fmt, ...) {
 	vsnprintf(&ctx->statusMsg[0], msgLen, fmt, ap);
 	va_end(ap);
 	ctx->statusMsgTime = time(NULL);
+	return msgLen;
 }
 
 void editorClosePage(editorContext* ctx, int at, bool save) {
@@ -1163,10 +1116,12 @@ void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt) {
 	int lastState = ctx->state;
 	ctx->state = ES_PROMPT;
 	while(1) {
+		// Update editor state
 		editorSetMessage(ctx, prompt, buf->data);
 		editorPrint(ctx);
 		refresh();
-
+		
+		// Get input
 		int c = getch();
 		if (c == KEY_DC || c == KEY_BACKSPACE || c == CTRL_KEY('h')) {
 			strbufDelChar(buf);
@@ -1181,7 +1136,7 @@ void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt) {
 			}
 		} else if (!iscntrl(c) && c < 128) {
 			strbufAddChar(buf, c);
-		}
+		}		
 	}
 	ctx->state = lastState;
 }
@@ -1195,34 +1150,33 @@ void cbMenuHelpAbout(void* data, int num) {
 	editorSetMessage(ctx, "VERSION %s", NEO_VERSION);
 }
 
-void cbMenuHelpShortcuts(void* data, int num) {
-	if (!data) { return; }
-	(void)(num);
-
-	// Extract arguments
-	editorContext* ctx = (editorContext*)(data);
-
-	// Open dummy page
-	editorOpenPage(ctx, NULL);
-	editorPage* page = EDITOR_CURR_PAGE(ctx);
-	page->filename = strdup("SHORTCUTS");
-	page->fullFilename = strdup("SHORTCUTS");
-	PAGE_FLAG_SET(page, EF_READONLY);
-	char* line;
-	size_t n = 0;
-	ssize_t linelen = 0;
-	FILE* file = fmemopen((void*)_help_shortcuts_contents, strlen(_help_shortcuts_contents), "r");
-	while((linelen = getline(&line, &n, file)) != -1) {
-		while(linelen > 0 && (line[linelen - 1] == '\n' || line[linelen - 1] == '\r')) {
-			linelen--;
-		}
-		pageInsertRow(page, -1, line, (unsigned int)linelen);
-	}
-	fclose(file);
-}
-
-const char _help_shortcuts_contents[] = "\
-Open menu bars: \n\
-\tFile: Ctrl-F \n\
-\tEdit: Ctrl-E \n\
-\tHelp: Ctrl-H \n";
+const char _help_docs_filename[] = "DOCS";
+const char _help_docs_contents[] = "\
+=====CONCEPTS======\n\
+Status Bar:\n\
+\tThe white bar along the bottom of the screen is for displaying\n\
+\tstatus messages, as well as prompting user input. When opening\n\
+\tor saving a file, for instance, you will be asked to input a\n\
+\tfilename on that bar. Note that you can cancel out of input\n\
+\tprompting at any time with the Quit shortcut, Ctrl-Q. It also\n\
+\tdisplays where your cursor is in the file.\n\
+\n\
+Info Bar:\n\
+\tThe bottom line of the screen is reserved for showing information\n\
+\tabout the file itself, such as it's full path, how many lines\n\
+\tare in it, and any special attributes, such as whether it is\n\
+\tread-only.\n\
+\n\
+Menu Bar:\n\
+\tIf you can't remember the key shortcut to perform an action, or\n\
+\tjust don't want to use it, you can open the menu bar to select\n\
+\tan action manually. To close the menu bar and return to editing,\n\
+\teither select an action with Enter(navigating using the arrow keys),\n\
+\tuse the Quit shortcut Ctrl-Q, or use the same shortcut you used\n\
+\tto open the currently active menu.\n\
+\n\
+=====SHORTUCTS=====\n\
+Open menu groups:\n\
+\tFile: Ctrl-F\n\
+\tEdit: Ctrl-E\n\
+\tHelp: Ctrl-H\n";
