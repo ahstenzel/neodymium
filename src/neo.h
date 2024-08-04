@@ -24,6 +24,7 @@
 #include <libgen.h>
 #include <ncurses.h>
 #include <ctype.h>
+#include <assert.h>
 
 
 // ============================================== defines
@@ -38,6 +39,10 @@ enum editorFlag {
 
 enum editorState {
 	ES_OPEN = 1,			// Normal state for reading user input & drawing to the screen.
+	ES_PROMPT,				// Prompting user for input on the status bar.
+	ES_MENU_FILE,			// Selecting file menu option.
+	ES_MENU_EDIT,			// Selecting edit menu option.
+	ES_MENU_HELP,			// Selecting help menu option.
 	ES_SHOULD_CLOSE			// Editing has finished and the program should clean up & terminate.
 };
 
@@ -143,6 +148,7 @@ typedef struct {
 typedef struct {
 	editorRow* rows;
 	char* filename;
+	char* fullFilename;
 	int maxRows;
 	int numRows;
 	int cx, cy;
@@ -299,10 +305,10 @@ void editorClosePage(editorContext* ctx, int at, bool save);
 bool editorCloseAll(editorContext* ctx);
 
 /// @brief Use the status bar to prompt for user input.
-/// @param ctx 
-/// @param prompt 
-/// @return 
-char* editorPrompt(editorContext* ctx, const char* prompt);
+/// @param ctx Context pointer
+/// @param buf Destination string buffer (uninitialized)
+/// @param prompt Formatted strings
+void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt);
 
 
 // ============================================== functional macros
