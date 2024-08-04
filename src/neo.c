@@ -81,7 +81,7 @@ bool _neo_flag_resized = false;
 
 void strbufInit(strbuf* buf, unsigned int capacity) {
 	if (!buf) { return; }
-	assert(capacity >= 1);
+	assert(capacity > 0);
 
 	buf->data = malloc(capacity);
 	buf->size = 0;
@@ -98,21 +98,23 @@ void strbufClear(strbuf* buf) {
 	buf->capacity = 0;
 }
 
-void strbufDelete(strbuf* buf, unsigned int at, unsigned int len) {
+void strbufDelete(strbuf* buf, unsigned int at, int len) {
 	if (!buf || at >= buf->size || len == 0) { return; }
 
-	// Adjust boundaries
+	// Check boundaries
 	if (at + len >= buf->size) { 
 		len -= (at + len) - buf->size; 
 	}
+	if (len < 0) {
+		len = buf->size - at;
+	}
 
 	// Shift data around
-	if (at + len + 1 < buf->size) { 
-		memmove(&buf->data[at], &buf->data[at + len], buf->size - (at + len) + 1); 
-	} else { 
-		buf->data[at + 1] = '\0'; 
+	if (at + len < buf->size) { 
+		memmove(&buf->data[at], &buf->data[at + len], buf->size - (at + len)); 
 	}
 	buf->size -= len;
+	buf->data[buf->size] = '\0';
 }
 
 void strbufAppend(strbuf* buf, const char* str, unsigned int len) {
@@ -227,7 +229,7 @@ void rowUpdate(editorContext* ctx, editorRow* row) {
 	if (!row || !row->dirty) { return; }
 
 	// Clear render buffer
-	strbufDelete(&row->rtext, 0, row->rtext.size);
+	strbufDelete(&row->rtext, 0, -1);
 
 	// Render text
 	for(unsigned int j=0; j<row->text.size; ++j) {
@@ -254,6 +256,34 @@ int rowCxToRx(editorContext* ctx, editorRow* row, int cx) {
 		rx++;
 	}
 	return rx;
+}
+
+void rowInsert(editorRow* row, int at, const char* str, unsigned int len) {
+	if (!row) { return; }
+
+	// Check boundaries
+	unsigned int pos = 0;
+	if (at < 0 || (unsigned int)at > row->text.size) { 
+		pos = row->text.size;
+	} else {
+		pos = (unsigned int)at;
+	}
+	strbufInsert(&row->text, str, len, pos);
+	row->dirty = true;
+}
+
+void rowDelete(editorRow* row, int at, int len) {
+	if (!row) { return; }
+
+	// Check boundaries
+	unsigned int pos = 0;
+	if (at < 0 || (unsigned int)at >= row->text.size) { 
+		pos = row->text.size - 1;
+	} else {
+		pos = (unsigned int)at;
+	}
+	strbufDelete(&row->text, pos, len);
+	row->dirty = true;
 }
 
 void pageInit(editorPage* page) {
@@ -305,8 +335,8 @@ void pageGrowRows(editorPage* page) {
 	page->maxRows = newSize;
 }
 
-void pageInsertRow(editorPage* page, int at, char* str, unsigned int len) {
-	if (!page) { return; }
+editorRow* pageInsertRow(editorPage* page, int at, char* str, unsigned int len) {
+	if (!page) { return NULL; }
 	
 	// Check boundaries
 	if (at < 0 || at > page->numRows) { 
@@ -325,7 +355,7 @@ void pageInsertRow(editorPage* page, int at, char* str, unsigned int len) {
 
 	// Copy text buffer to row
 	editorRow* row = &page->rows[at];
-	strbufDelete(&row->text, 0, row->text.size);
+	strbufDelete(&row->text, 0, -1);
 	strbufSet(&row->text, str, len, 0);
 	row->dirty = true;
 
@@ -334,11 +364,27 @@ void pageInsertRow(editorPage* page, int at, char* str, unsigned int len) {
 	if (PAGE_FLAG_ISCLEAR(page, EF_READONLY)) {
 		PAGE_FLAG_SET(page, EF_DIRTY);
 	}
+	return row;
 }
 
 void pageDeleteRow(editorPage* page, int at) {
-	(void)(page);
-	(void)(at);
+	if (!page) { return; }
+
+	// Check boundaries
+	if (at < 0 || at >= page->numRows) { 
+		at = page->numRows - 1;
+	}
+
+	// Shift rows up
+	if (at < page->numRows - 1) {
+		memmove(&page->rows[at], &page->rows[at + 1], (page->numRows - at - 1) * sizeof(*page->rows));
+	}
+	
+	// Update state
+	page->numRows--;
+	if (PAGE_FLAG_ISCLEAR(page, EF_READONLY)) {
+		PAGE_FLAG_SET(page, EF_DIRTY);
+	}
 }
 
 static void correctForTabs(editorContext* ctx, editorPage* page, editorRow* currRow, editorRow* nextRow) {
@@ -422,29 +468,94 @@ void pageMoveCursor(editorContext* ctx, editorPage* page, int dir, int num) {
 }
 
 void pageSetCursorRow(editorPage* page, int at) {
-	(void)(page);
-	(void)(at);
+	if (!page) { return; }
+
+	// Check boundaries
+	if (at < 0 || at > page->numRows) { at = page->numRows - 1; }
+	page->cy = at;
 }
 
 void pageSetCursorCol(editorPage* page, int at) {
-	(void)(page);
-	(void)(at);
+	if (!page) { return; }
+
+	// Get current row
+	editorRow* row = PAGE_CURR_ROW(page);
+	if (!row) { 
+		page->cx = 0; 
+		return;
+	}
+
+	// Check boundaries
+	if (at < 0 || (unsigned int)at > row->text.size) { at = row->text.size; }
+	page->cx = at;
 }
 
 void pageSave(editorContext* ctx, editorPage* page) {
-	(void)(ctx);
-	(void)(page);
-	/*
+	if (!page || PAGE_FLAG_ISCLEAR(page, EF_DIRTY)) { return; }
+
 	if (!page->filename) {
-		editorSetPage(ctx, at);
-		char* filename = editorPrompt(ctx, "File name: %s");
-		if (filename) {
-			page->filename = strdup(filename);
-			free(filename);
-			pageSave(ctx, page);
+		editorSetPage(ctx, pageGetNumber(ctx, page));
+		strbuf inputFilename;
+		editorPrompt(ctx, &inputFilename, "File name: %s");
+		if (inputFilename.data) {
+			pageSetFullFilename(page, inputFilename.data);
+		} else {
+			strbufClear(&inputFilename);
+			return;
+		}
+		strbufClear(&inputFilename);
+	}
+
+	// Open file
+	FILE* fp = NULL;
+	while(1) {
+		fp = fopen(page->fullFilename, "w");
+		if (fp) { break; }
+
+		// Ask what to do in case of error
+		strbuf inputError;
+		editorPrompt(ctx, &inputError, "Failed to open file (%s)! (r=Retry / c=Cancel):");
+		if (inputError.data) {
+			STR_TOLOWER(inputError.data);
+			if (strcmp(inputError.data, "r") == 0) {
+				strbufClear(&inputError);
+			} else if (strcmp(inputError.data, "c") == 0) {
+				strbufClear(&inputError);
+				return;
+			}
+		} else {
+			strbufClear(&inputError);
+			return;
 		}
 	}
-	*/
+
+	// Write to file
+	for(int rowIdx = 0; rowIdx < page->numRows; ++rowIdx) {
+		editorRow* row = &page->rows[rowIdx];
+		fputs(row->text.data,fp);
+		fputs("\n", fp);
+	}
+	fclose(fp);
+
+	// Update flags
+	editorSetMessage(ctx, "Saved successfully!");
+	PAGE_FLAG_CLEAR(page, EF_DIRTY);
+}
+
+void pageSetFullFilename(editorPage* page, char* fullFilename) {
+	if (!page) { return; }
+
+	page->fullFilename = strdup(fullFilename);
+	page->filename = strdup(basename(fullFilename));
+}
+
+int pageGetNumber(editorContext* ctx, editorPage* page) {
+	if (!ctx || !page) { return -1; }
+
+	for(int i=0; i<ctx->numPages; ++i) {
+		if (&ctx->pages[i] == page) { return i; }
+	}
+	return -1;
 }
 
 void editorInit(editorContext* ctx) {
@@ -648,7 +759,8 @@ void editorPrint(editorContext* ctx) {
 			if (len < 0) { len = 0; }
 			if (len > ctx->screenCols) { len = ctx->screenCols; }
 			addnstr(row->rtext.data + currPage->colOff, len);
-			if (len < ctx->screenCols) { addch('\n'); }
+			for(int j=len; j<ctx->screenCols; ++j) { addch(' '); }
+			//if (len < ctx->screenCols) { addch('\n'); }
 		}
 	}
 
@@ -727,10 +839,13 @@ void editorPrint(editorContext* ctx) {
 	// Move cursor
 	if (ctx->state == ES_MENU) {
 		curs_set(0);
+	} else if (ctx->state == ES_PROMPT) {
+		curs_set(1);
+		move(ctx->screenRows + NEO_HEADER, 0);
 	} else {
 		curs_set(1);
+		move(currPage->ry - currPage->rowOff, currPage->rx - currPage->colOff);
 	}
-	move(currPage->ry - currPage->rowOff, currPage->rx - currPage->colOff);
 }
 
 void editorPrintMenu(editorContext* ctx, menuGroup* grp, int off) {
@@ -867,6 +982,89 @@ void editorHandleInput(editorContext* ctx, int key) {
 				case CTRL_KEY('f'): { ctx->state = ES_MENU; ctx->currMenu = 0; } break;
 				case CTRL_KEY('e'): { ctx->state = ES_MENU; ctx->currMenu = 1; } break;
 				case CTRL_KEY('h'): { ctx->state = ES_MENU; ctx->currMenu = 2; } break;
+				case KEY_BACKSPACE: {
+					if (PAGE_FLAG_ISSET(page, EF_READONLY)) { 
+						editorSetMessage(ctx, "File is in read-only mode!");
+						break; 
+					}
+					editorRow* row = PAGE_CURR_ROW(page);
+					if (row) {
+						if (page->cx == 0 && page->cy > 0) {
+							// Merge text with previous line
+							editorRow* lastRow = &page->rows[page->cy - 1];
+							strbuf temp;
+							strbufInit(&temp, row->text.size + 1);
+							strbufAppend(&temp, row->text.data, row->text.size);
+							pageDeleteRow(page, page->cy);
+							rowInsert(lastRow, -1, temp.data, temp.size);
+							pageMoveCursor(ctx, page, ED_UP, 1);
+							pageSetCursorCol(page, lastRow->text.size - temp.size);
+							strbufClear(&temp);
+						} else {
+							pageMoveCursor(ctx, page, ED_LEFT, 1);
+							rowDelete(row, page->cx, 1);
+						}
+					}
+				} break;
+				case KEY_DC: {
+					if (PAGE_FLAG_ISSET(page, EF_READONLY)) { 
+						editorSetMessage(ctx, "File is in read-only mode!");
+						break; 
+					}
+					editorRow* row = PAGE_CURR_ROW(page);
+					if (row) {
+						if (page->cx == (int)row->text.size && page->cy < page->numRows - 1) {
+							// Bring next line onto current line
+							editorRow* nextRow = &page->rows[page->cy + 1];
+							strbuf temp;
+							strbufInit(&temp, nextRow->text.size + 1);
+							strbufAppend(&temp, nextRow->text.data, nextRow->text.size);
+							pageDeleteRow(page, page->cy + 1);
+							rowInsert(row, -1, temp.data, temp.size);
+							strbufClear(&temp);
+						} else if (page->cx < (int)row->text.size) {
+							rowDelete(row, page->cx, 1);
+						}
+					}
+				} break;
+				case '\n':
+				case '\r':
+				case KEY_ENTER: {
+					if (PAGE_FLAG_ISSET(page, EF_READONLY)) { 
+						editorSetMessage(ctx, "File is in read-only mode!");
+						break; 
+					}
+					editorRow* row = PAGE_CURR_ROW(page);
+					if (row) {
+						// Split text onto a new line
+						strbuf temp;
+						strbufInit(&temp, row->text.size + 1);
+						strbufAppend(&temp, &row->text.data[page->cx], row->text.size - (unsigned int)page->cx);
+						rowDelete(row, page->cx, (int)row->text.size - page->cx);
+						pageInsertRow(page, page->cy + 1, temp.data, temp.size);
+						pageSetCursorCol(page, 0);
+						pageMoveCursor(ctx, page, ED_DOWN, 1);
+						strbufClear(&temp);
+					} else {
+						pageInsertRow(page, -1, "", 0);
+						pageMoveCursor(ctx, page, ED_DOWN, 1);
+					}
+				} break;
+				default: {
+					if (PAGE_FLAG_ISSET(page, EF_READONLY)) { 
+						editorSetMessage(ctx, "File is in read-only mode!");
+						break; 
+					}
+					if ((!iscntrl(key) && key < 128) || key == '\t') {
+						editorRow* row = PAGE_CURR_ROW(page);
+						if (!row) {
+							row = pageInsertRow(page, -1, "", 0);
+						}
+						char text = (char)(key);
+						rowInsert(row, page->cx, &text, 1);
+						pageMoveCursor(ctx, page, ED_RIGHT, 1);
+					}
+				} break;
 			}
 		} break;
 		case ES_MENU: {
@@ -951,8 +1149,8 @@ void editorHandleInput(editorContext* ctx, int key) {
 	}
 }
 
-bool editorOpenPage(editorContext* ctx, char* filename, int internal) {
-	if (!ctx) { return false; }
+editorPage* editorOpenPage(editorContext* ctx, char* filename, int internal) {
+	if (!ctx) { return NULL; }
 	
 	// Resize array if necessary
 	if (ctx->numPages >= ctx->maxPages) { 
@@ -965,7 +1163,7 @@ bool editorOpenPage(editorContext* ctx, char* filename, int internal) {
 		ctx->numPages++;
 		editorPage* page = EDITOR_CURR_PAGE(ctx);
 		pageInit(page);
-		return true;
+		return page;
 	} else {
 		// Check if file is valid
 		int pageFlags = 0;
@@ -979,14 +1177,14 @@ bool editorOpenPage(editorContext* ctx, char* filename, int internal) {
 			}
 			if (!fp) {
 				editorSetMessage(ctx, "Failed to open internal file (%d)!", internal);
-				return false;
+				return NULL;
 			}
 		} else {
 			// External files
 			fp = fopen(filename, "r");
 			if (!fp) { 
 				editorSetMessage(ctx, "Failed to open file (%s)!", filename);
-				return false;
+				return NULL;
 			}
 		}
 
@@ -995,8 +1193,7 @@ bool editorOpenPage(editorContext* ctx, char* filename, int internal) {
 		ctx->numPages++;
 		editorPage* page = EDITOR_CURR_PAGE(ctx);
 		pageInit(page);
-		page->filename = strdup(basename(filename));
-		page->fullFilename = strdup(filename);
+		pageSetFullFilename(page, filename);
 
 		// Populate page with file contents
 		char* line = NULL;
@@ -1012,7 +1209,7 @@ bool editorOpenPage(editorContext* ctx, char* filename, int internal) {
 		free(line);
 		fclose(fp);
 		page->flags = pageFlags;
-		return true;
+		return page;
 	}
 }
 
@@ -1028,7 +1225,7 @@ void editorSetPage(editorContext* ctx, int at) {
 int editorSetMessage(editorContext* ctx, const char* fmt, ...) {
 	if (!ctx) { return 0; }
 
-	int msgLen = min(ctx->screenCols - 16, 79);
+	int msgLen = MIN(ctx->screenCols - 16, 79);
 	va_list ap;
 	va_start(ap, fmt);
 	vsnprintf(&ctx->statusMsg[0], msgLen, fmt, ap);
@@ -1080,9 +1277,9 @@ bool editorCloseAll(editorContext* ctx) {
 	if (save) {
 		while (1) {
 			strbuf input;
-			editorPrompt(ctx, &input, "Save all files? (y/n/c) %s");
+			editorPrompt(ctx, &input, "Save all files? (y=Yes / n=No / c=Cancel) %s");
 			if (input.data) {
-				for(char* i = input.data; *i; ++i) { *i = tolower(*i); }
+				STR_TOLOWER(input.data);
 				if (strcmp(input.data, "y") == 0) {
 					strbufClear(&input);
 					break;
@@ -1094,6 +1291,9 @@ bool editorCloseAll(editorContext* ctx) {
 					strbufClear(&input);
 					return false;
 				}
+			} else {
+				strbufClear(&input);
+				return false;
 			}
 			strbufClear(&input);
 		}

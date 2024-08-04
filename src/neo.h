@@ -129,8 +129,8 @@ void strbufClear(strbuf* buf);
 /// @brief Remove text from the string buffer.
 /// @param buf String buffer pointer
 /// @param at Starting position
-/// @param len Number of characters to remove
-void strbufDelete(strbuf* buf, unsigned int at, unsigned int len);
+/// @param len Number of characters to remove (or -1 to remove until the end)
+void strbufDelete(strbuf* buf, unsigned int at, int len);
 
 /// @brief Append text to the string buffer.
 /// @param buf String buffer pointer
@@ -237,6 +237,18 @@ void rowUpdate(editorContext* ctx, editorRow* row);
 /// @return Rendered X position
 int rowCxToRx(editorContext* ctx, editorRow* row, int cx);
 
+/// @brief Insert text into the row.
+/// @param row Row pointer
+/// @param at Position to insert at (or -1 for the end)
+/// @param str String to insert
+/// @param len String length
+void rowInsert(editorRow* row, int at, const char* str, unsigned int len);
+
+/// @brief Remove text from the row.
+/// @param row Row pointer
+/// @param at Position to delete at
+/// @param len Number of characters to delete (or -1 to delete till the end)
+void rowDelete(editorRow* row, int at, int len);
 
 
 /// @brief Initialize a page structure.
@@ -261,7 +273,8 @@ void pageGrowRows(editorPage* page);
 /// @param at Row to insert at (or -1 for the end)
 /// @param str Row initial text
 /// @param len Text length
-void pageInsertRow(editorPage* page, int at, char* str, unsigned int len);
+/// @return Inserted row
+editorRow* pageInsertRow(editorPage* page, int at, char* str, unsigned int len);
 
 /// @brief Delete the row of text from the page.
 /// @param page Page poitner
@@ -290,6 +303,16 @@ void pageSetCursorCol(editorPage* page, int at);
 /// @param page Page pointer
 void pageSave(editorContext* ctx, editorPage* page);
 
+/// @brief Set the complete filename of a page.
+/// @param page Page pointer
+/// @param filename Full filename, including path and basename
+void pageSetFullFilename(editorPage* page, char* fullFilename);
+
+/// @brief Get whichever number the page is in the tab list.
+/// @param ctx Context pointer
+/// @param page Page pointer
+/// @return Page number (or -1 on error)
+int pageGetNumber(editorContext* ctx, editorPage* page);
 
 
 /// @brief Initialize an editor context structure.
@@ -332,8 +355,8 @@ void editorHandleInput(editorContext* ctx, int key);
 /// @param ctx Context pointer
 /// @param filename File to open (or NULL for a blank page)
 /// @param internal If filename is NULL and this is >= 0, open an internal document instead of a blank page
-/// @return True if file opened successfully
-bool editorOpenPage(editorContext* ctx, char* filename, int internal);
+/// @return Created page (or NULL on error)
+editorPage* editorOpenPage(editorContext* ctx, char* filename, int internal);
 
 /// @brief Set the currently visible page in the editor.
 /// @param ctx Context pointer
@@ -380,11 +403,13 @@ extern const char _help_docs_filename[];
 
 #define EDITOR_CURR_MENU(ctx) &((ctx)->menus[(ctx)->currMenu])
 
+#define PAGE_CURR_ROW(page) (((page)->cy < (page)->numRows) ? (&(page)->rows[(page)->cy]) : NULL)
+
 #define CTRL_KEY(x) ((x) & 0x1f)
 
-#define min(a, b) ((a) < (b)) ? (a) : (b)
+#define MIN(a, b) ((a) < (b)) ? (a) : (b)
 
-#define max(a, b) ((a) > (b)) ? (a) : (b)
+#define MAX(a, b) ((a) > (b)) ? (a) : (b)
 
 #define PAGE_FLAG_ISSET(p, f) (((p)->flags & (f)) != 0)
 
@@ -393,5 +418,13 @@ extern const char _help_docs_filename[];
 #define PAGE_FLAG_SET(p, f) ((p)->flags |= (f))
 
 #define PAGE_FLAG_CLEAR(p, f) ((p)->flags &= ~(f))
+
+#define STR_TOLOWER(str) do { \
+	for(char* _c = (str); *_c; ++_c) { *_c = tolower(*_c); } \
+} while(0)
+
+#define STR_TOUPPER(str) do { \
+	for(char* _c = (str); *_c; ++_c) { *_c = toupper(*_c); } \
+} while(0)
 
 #endif // NEO_H

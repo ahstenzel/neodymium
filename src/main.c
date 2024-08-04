@@ -16,31 +16,35 @@ int main(int argc, char* argv[]) {
 	cursesInit();
 
 	// Create editor context
-	editorContext* ctx = malloc(sizeof *ctx);
-	editorInit(ctx);
-	if (!ctx) { return 1; }
+	editorContext ctx;
+	editorInit(&ctx);
 
 	// Load files from command line
 	if (argc >= 2) {
 		for(int i=1; i<argc; ++i) {
-			editorOpenPage(ctx, argv[i], -1);
+			if (!editorOpenPage(&ctx, argv[i], -1)) {
+				// If opening the file failed, create a blank page with the files name
+				editorSetMessage(&ctx, "");
+				editorOpenPage(&ctx, NULL, -1);
+				pageSetFullFilename(EDITOR_CURR_PAGE(&ctx), argv[i]);
+			}
 		}
-		editorSetPage(ctx, 0);
+		editorSetPage(&ctx, 0);
 	} else {
-		editorOpenPage(ctx, NULL, -1);
+		// Open a blank untitled page
+		editorOpenPage(&ctx, NULL, -1);
 	}
 
 	// Event loop
-	while(editorGetState(ctx) != ES_SHOULD_CLOSE) {
-		editorUpdate(ctx);
-		editorPrint(ctx);
+	while(editorGetState(&ctx) != ES_SHOULD_CLOSE) {
+		editorUpdate(&ctx);
+		editorPrint(&ctx);
 		refresh();
 		int ch = getch();
-		editorHandleInput(ctx, ch);
+		editorHandleInput(&ctx, ch);
 	}
 	endwin();
 
-	editorClear(ctx);
-	free(ctx);
+	editorClear(&ctx);
 	return 0;
 }
