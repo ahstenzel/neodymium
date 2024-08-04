@@ -34,7 +34,8 @@
 #define NEO_FOOTER 2
 
 enum editorFlag {
-	EF_DIRTY = 0x01			// File has been modified and should be saved before closing.
+	EF_DIRTY = 0x01,		// File has been modified and should be saved before closing.
+	EF_READONLY = 0x02		// File is marked as read-only and cannot be modified or saved.
 };
 
 enum editorState {
@@ -65,6 +66,46 @@ void signalHandler(int sig);
 
 extern bool _neo_flag_resized;
 
+
+// ============================================== context menus
+
+/// @brief Callback function for a menu entry.
+typedef void (*fptrMenuCallback)(void*, int);
+
+/// @brief Entry for a context menu.
+typedef struct {
+	char* name;
+	char shortcut;
+	fptrMenuCallback callback;
+} menuEntry;
+
+/// @brief List of menu entries.
+typedef struct {
+	menuEntry* entries;
+	int numEntries;
+	int maxEntries;
+	int selected;
+} menuGroup;
+
+/// @brief Initialize a menu group structure.
+/// @param grp Menu group pointer
+void menuGroupInit(menuGroup* grp);
+
+/// @brief Free all memory associated with the menu group.
+/// @param grp Menu group pointer
+void menuGroupClear(menuGroup* grp);
+
+/// @brief Add a new entry to the menu group.
+/// @param grp Menu group pointer
+/// @param at Position to insert at (or -1 for the end)
+/// @param entry Entry to add (NULL name treated as seperator)
+void menuGroupInsert(menuGroup* grp, int at, menuEntry entry);
+
+/// @brief Remove the entry from the menu group.
+/// @param grp Menu group pointer
+/// @param at Position to delete (or -1 for the end)
+void menuGroupDelete(menuGroup* grp, int at);
+
 // ============================================== text buffers
 
 /// @brief Dynamically resizing null-terminated text buffer.
@@ -74,7 +115,7 @@ typedef struct {
 	unsigned int capacity;
 } strbuf;
 
-/// @brief Initialize a string buffer structure, freeing any memory it had before.
+/// @brief Initialize a string buffer structure.
 /// @param buf String buffer pointer
 /// @param capacity Initial buffer capacity
 void strbufInit(strbuf* buf, unsigned int capacity);
@@ -99,7 +140,7 @@ void strbufAppend(strbuf* buf, const char* str, unsigned int len);
 /// @param buf String buffer pointer
 /// @param str String to insert
 /// @param len String length
-/// @param at Starting position in buffer.
+/// @param at Starting position in buffer
 void strbufInsert(strbuf* buf, const char* str, unsigned int len, unsigned int at);
 
 /// @brief Overwrite the text in the string buffer.
@@ -169,6 +210,9 @@ typedef struct {
 	int state;
 	int pageOff;
 
+	menuGroup menuFile;
+	menuGroup menuEdit;
+	menuGroup menuHelp;
 	int settingTabStop;
 } editorContext;
 
@@ -311,6 +355,17 @@ bool editorCloseAll(editorContext* ctx);
 void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt);
 
 
+// ============================================== menu actions
+
+/// @brief Callback function for the Help->About menu entry.
+void cbMenuHelpAbout(void* data, int num);
+
+/// @brief Callback function for the Help->Shortcuts menu entry.
+void cbMenuHelpShortcuts(void* data, int num);
+
+extern const char _help_shortcuts_contents[];
+
+
 // ============================================== functional macros
 
 #define EDITOR_CURR_PAGE(ctx) &((ctx)->pages[(ctx)->currPage])
@@ -320,5 +375,13 @@ void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt);
 #define min(a, b) ((a) < (b)) ? (a) : (b)
 
 #define max(a, b) ((a) > (b)) ? (a) : (b)
+
+#define PAGE_FLAG_ISSET(p, f) (((p)->flags & (f)) != 0)
+
+#define PAGE_FLAG_ISCLEAR(p, f) (((p)->flags & (f)) == 0)
+
+#define PAGE_FLAG_SET(p, f) ((p)->flags |= (f))
+
+#define PAGE_FLAG_CLEAR(p, f) ((p)->flags &= ~(f))
 
 #endif // NEO_H
