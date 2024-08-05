@@ -193,7 +193,7 @@ typedef struct {
 	char* filename;
 	char* fullFilename;
 	int maxRows;
-	int numRows;
+	int numRows, numCols;
 	int cx, cy;
 	int rx, ry;
 	int rowOff, colOff;
@@ -381,7 +381,9 @@ void editorClosePage(editorContext* ctx, int at, bool save);
 /// @return True if pages close, False if cancelled
 bool editorCloseAll(editorContext* ctx);
 
-/// @brief Use the status bar to prompt for user input.
+/// @brief Use the status bar to prompt for user input. Note that this function
+/// @brief takes an uninitialied strbuf and will initialize it; it will be up to
+/// @brief the user to clear it once they are done using it.
 /// @param ctx Context pointer
 /// @param buf Destination string buffer (uninitialized)
 /// @param prompt Formatted strings
@@ -399,17 +401,35 @@ extern const char _help_docs_filename[];
 
 // ============================================== functional macros
 
-#define EDITOR_CURR_PAGE(ctx) &((ctx)->pages[(ctx)->currPage])
+#if !__STRICT_ANSI__ && __GNUC__ >= 3
+	/// @brief Get the currently viewed page.
+	#define EDITOR_CURR_PAGE(ctx) ({ __typeof__ (ctx) _ctx=(ctx); &(_ctx->pages[_ctx->currPage]); })
 
-#define EDITOR_CURR_MENU(ctx) &((ctx)->menus[(ctx)->currMenu])
+	/// @brief Get the currently active menu group.
+	#define EDITOR_CURR_MENU(ctx) ({ __typeof__ (ctx) _ctx=(ctx); &(_ctx->menus[_ctx->currMenu]); })
 
-#define PAGE_CURR_ROW(page) (((page)->cy < (page)->numRows) ? (&(page)->rows[(page)->cy]) : NULL)
+	/// @brief Get the row where the cursor is.
+	#define PAGE_CURR_ROW(page) ({ __typeof__ (page) _page=(page); (_page->cy < _page->numRows) ? &(_page->rows[_page->cy]) : NULL; })
+
+	#define MIN(a,b) ({ __typeof__ (a) _a=(a); __typeof__ (b) _b=(b); _a<_b ? _a : _b; })
+	#define MAX(a,b) ({ __typeof__ (a) _a=(a); __typeof__ (b) _b=(b); _a>_b ? _a : _b; })
+#else
+	/// @brief Get the currently viewed page.
+	#define EDITOR_CURR_PAGE(ctx) &((ctx)->pages[(ctx)->currPage])
+	
+	/// @brief Get the currently active menu group.
+	#define EDITOR_CURR_MENU(ctx) &((ctx)->menus[(ctx)->currMenu])
+	
+	/// @brief Get the row where the cursor is.
+	#define PAGE_CURR_ROW(page) (((page)->cy < (page)->numRows) ? (&(page)->rows[(page)->cy]) : NULL)
+	
+	#define MIN(a, b) ((a) < (b)) ? (a) : (b)
+	#define MAX(a, b) ((a) > (b)) ? (a) : (b)
+#endif
+
+#define NEO_SCROLL_MARGIN 1
 
 #define CTRL_KEY(x) ((x) & 0x1f)
-
-#define MIN(a, b) ((a) < (b)) ? (a) : (b)
-
-#define MAX(a, b) ((a) > (b)) ? (a) : (b)
 
 #define PAGE_FLAG_ISSET(p, f) (((p)->flags & (f)) != 0)
 

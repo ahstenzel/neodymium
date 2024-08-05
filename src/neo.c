@@ -294,6 +294,7 @@ void pageInit(editorPage* page) {
 	page->fullFilename = NULL;
 	page->maxRows = 0;
 	page->numRows = 0;
+	page->numCols = 0;
 	page->cx = 0;
 	page->cy = 0;
 	page->rx = 0;
@@ -317,8 +318,10 @@ void pageClear(editorPage* page) {
 void pageUpdate(editorContext* ctx, editorPage* page) {
 	if (!page) { return; }
 
-	for(int i=0; i<page->numRows; ++i) { 
-		rowUpdate(ctx, &page->rows[i]); 
+	for(int i=0; i<page->numRows; ++i) {
+		editorRow* row = &page->rows[i]; 
+		rowUpdate(ctx, row); 
+		page->numCols = MAX(page->numCols, (int)row->rtext.size);
 	}
 }
 
@@ -585,11 +588,7 @@ void editorInit(editorContext* ctx) {
 	menuEdit->name = strdup("Edit");
 	menuHelp->name = strdup("Help");
 
-	menuEntry spacer = {
-		.name = NULL,
-		.shortcut = '\0',
-		.callback = NULL
-	};
+	menuEntry spacer = { 0 };
 	menuEntry entry = { 0 };
 	entry.name = "New"; entry.shortcut = 'n'; menuGroupInsert(menuFile, -1, entry);
 	entry.name = "Open"; entry.shortcut = 'o'; menuGroupInsert(menuFile, -1, entry);
@@ -630,6 +629,13 @@ void editorClear(editorContext* ctx) {
 void editorUpdate(editorContext* ctx) {
 	if (!ctx) { return; }
 
+	// Query terminfo for window size
+	if (_neo_flag_resized) {
+		getmaxyx(stdscr, ctx->screenRows, ctx->screenCols);
+		ctx->screenRows -= (NEO_HEADER + NEO_FOOTER);
+		_neo_flag_resized = false;
+	}
+
 	for(int i=0; i<ctx->numPages; ++i) { 
 		pageUpdate(ctx, &ctx->pages[i]); 
 	}
@@ -653,13 +659,6 @@ int editorGetState(editorContext* ctx) {
 void editorPrint(editorContext* ctx) {
 	if (!ctx) { return; }
 
-	// Query terminfo for window size
-	if (_neo_flag_resized) {
-		getmaxyx(stdscr, ctx->screenRows, ctx->screenCols);
-		ctx->screenRows -= (NEO_HEADER + NEO_FOOTER);
-		_neo_flag_resized = false;
-	}
-
 	// Calculate rendered cursor position
 	editorPage* currPage = EDITOR_CURR_PAGE(ctx);
 	if (currPage->cy < currPage->numRows) {
@@ -671,10 +670,25 @@ void editorPrint(editorContext* ctx) {
 	currPage->ry = currPage->cy + NEO_HEADER;
 
 	// Calculate row & column offsets
-	if (currPage->cy < currPage->rowOff) { currPage->rowOff = currPage->cy; }
-	if (currPage->cy >= currPage->rowOff + ctx->screenRows) { currPage->rowOff = currPage->cy - ctx->screenRows + 1; }
-	if (currPage->rx < currPage->colOff) { currPage->colOff = currPage->rx; }
-	if (currPage->rx >= currPage->colOff + ctx->screenCols) { currPage->colOff = currPage->rx - ctx->screenCols + 1; }
+	if (currPage->cy - NEO_SCROLL_MARGIN < currPage->rowOff) { 
+		currPage->rowOff = MAX(0, currPage->cy - NEO_SCROLL_MARGIN); 
+	}
+	if (currPage->cy + NEO_SCROLL_MARGIN >= currPage->rowOff + ctx->screenRows) { 
+		currPage->rowOff = MIN(
+			(currPage->numRows + NEO_SCROLL_MARGIN + 1) - ctx->screenRows, 
+			(currPage->cy - ctx->screenRows) + NEO_SCROLL_MARGIN + 1
+		); 
+	}
+	if (currPage->rx - NEO_SCROLL_MARGIN < currPage->colOff) { 
+		currPage->colOff = MAX(0, currPage->rx - NEO_SCROLL_MARGIN); 
+	}
+	if (currPage->rx + NEO_SCROLL_MARGIN >= currPage->colOff + ctx->screenCols) { 
+		editorRow* row = PAGE_CURR_ROW(currPage);
+		currPage->colOff = MIN(
+			((int)row->rtext.size + NEO_SCROLL_MARGIN + 1) - ctx->screenCols,
+			(currPage->rx - ctx->screenCols) + NEO_SCROLL_MARGIN + 1
+		);
+	}
 
 	// Render full page line
 	move(1, 0);
@@ -760,7 +774,6 @@ void editorPrint(editorContext* ctx) {
 			if (len > ctx->screenCols) { len = ctx->screenCols; }
 			addnstr(row->rtext.data + currPage->colOff, len);
 			for(int j=len; j<ctx->screenCols; ++j) { addch(' '); }
-			//if (len < ctx->screenCols) { addch('\n'); }
 		}
 	}
 
@@ -811,7 +824,70 @@ void editorPrint(editorContext* ctx) {
 	}
 	addnstr(fileInfo, infoLen);
 
-	// Write file bar
+	// Draw vertical scroll bar
+	bool drawVerticalBar = (currPage->numRows + NEO_SCROLL_MARGIN >= ctx->screenRows);
+	if (drawVerticalBar) {
+		// Calculate scroll bar size
+		float sizeRatio = (ctx->screenRows) / (float)(currPage->numRows + 1 + NEO_SCROLL_MARGIN);
+		int barSize = MAX(1, (int)(sizeRatio * (ctx->screenRows - 2)));
+
+		// Calculate scroll bar offset
+		float offsetRatio = (currPage->rowOff) / (float)((currPage->numRows + 1 + NEO_SCROLL_MARGIN) - ctx->screenRows);
+		int barOffset = (int)(offsetRatio * (ctx->screenRows - 2 - barSize));
+
+		// Draw scrollbar
+		move(NEO_HEADER, ctx->screenCols - 1);
+		attron(A_REVERSE);
+		addch('^');
+		int i = 0;
+		for(; i<ctx->screenRows - NEO_HEADER; ++i) {
+			move(i + NEO_HEADER + 1, ctx->screenCols - 1);
+			if (i >= barOffset && i < barSize + barOffset) {
+				addch(' ');
+			} else {
+				attroff(A_REVERSE);
+				addch('|');
+				attron(A_REVERSE);
+			}
+		}
+		move(i + NEO_HEADER + 1, ctx->screenCols - 1);
+		addch('v');
+		attroff(A_REVERSE);
+	}
+
+	// Draw horizontal scroll bar
+	if (currPage->numCols + NEO_SCROLL_MARGIN >= ctx->screenCols) {
+		// Calculate scroll bar size
+		float sizeRatio = (ctx->screenCols) / (float)(currPage->numCols + 1 + NEO_SCROLL_MARGIN);
+		int barSize = MAX(1, (int)(sizeRatio * (ctx->screenCols - 2)));
+
+		// Calculate scroll bar offset
+		float offsetRatio = (currPage->colOff) / (float)((currPage->numCols + 1 + NEO_SCROLL_MARGIN) - ctx->screenCols);
+		int barOffset = (int)(offsetRatio * (ctx->screenCols - 2 - barSize));
+
+		// Draw scrollbar
+		move(NEO_HEADER + ctx->screenRows - 1, 0);
+		attron(A_REVERSE);
+		addch('<');
+		int i = 0;
+		for(; i<ctx->screenCols - 2; ++i) {
+			move(NEO_HEADER + ctx->screenRows - 1, i + 1);
+			if (i >= barOffset && i < barSize + barOffset) {
+				attron(A_UNDERLINE);
+				addch(' ');
+				attroff(A_UNDERLINE);
+			} else {
+				attroff(A_REVERSE);
+				addch('-');
+				attron(A_REVERSE);
+			}
+		}
+		move(NEO_HEADER + ctx->screenRows - 1, i + 1);
+		addch(drawVerticalBar ? 'x' : '>');
+		attroff(A_REVERSE);
+	}
+
+	// Write menu bar
 	move(0, 0);
 	for(int i=0; i<ctx->numMenus; ++i) {
 		menuGroup* menu = &ctx->menus[i];
@@ -857,7 +933,7 @@ void editorPrintMenu(editorContext* ctx, menuGroup* grp, int off) {
 	printw(",__________________,");
 	int i=0;
 	for(; i<grp->numEntries; ++i) {
-		move(i + 2, off);
+		move(i + NEO_HEADER, off);
 		menuEntry entry = grp->entries[i];
 		if (!entry.name) {
 			printw("|__________________|");
@@ -886,7 +962,7 @@ void editorPrintMenu(editorContext* ctx, menuGroup* grp, int off) {
 			addch('|');
 		}
 	}
-	move(i + 2, off);
+	move(i + NEO_HEADER, off);
 	printw("|__________________|");
 	attroff(A_REVERSE);
 }
@@ -1055,7 +1131,7 @@ void editorHandleInput(editorContext* ctx, int key) {
 						editorSetMessage(ctx, "File is in read-only mode!");
 						break; 
 					}
-					if ((!iscntrl(key) && key < 128) || key == '\t') {
+					if ((!iscntrl(key) && key < 128 && key >= 0) || key == '\t') {
 						editorRow* row = PAGE_CURR_ROW(page);
 						if (!row) {
 							row = pageInsertRow(page, -1, "", 0);
@@ -1308,10 +1384,7 @@ bool editorCloseAll(editorContext* ctx) {
 
 void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt) {
 	strbufInit(buf, 1);
-	if (!ctx) { 
-		strbufClear(buf);
-		return; 
-	}
+	if (!ctx) { return; }
 
 	int lastState = ctx->state;
 	ctx->state = ES_PROMPT;
@@ -1327,7 +1400,7 @@ void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt) {
 			strbufDelChar(buf);
 		} else if (c == CTRL_KEY('q') || c == CTRL_KEY('c')) {
 			editorSetMessage(ctx, "");
-			strbufClear(buf);
+			strbufDelete(buf, 0, -1);
 			break;
 		} else if (c == '\r' || c == '\n' || c == KEY_ENTER) {
 			if (buf->size != 0) {

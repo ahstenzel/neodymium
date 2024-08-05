@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pedantic -std=c99
+CFLAGS = -Wall -Wextra -std=gnu99
 LFLAGS = -lc -lncurses
 
 all: ./src/neo.c ./src/main.c
