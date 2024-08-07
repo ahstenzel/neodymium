@@ -1,0 +1,11 @@
+Source: neodymium
+Maintainer: Alex Stenzel <alexhstenzel@gmail.com>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.3
+Section: editors
+
+Package: neodymium
+Priority: optional
+Architecture: any
+Depends: ncurses-base
+Description: terminal text editor.

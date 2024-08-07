@@ -25,13 +25,14 @@
 #include <ncurses.h>
 #include <ctype.h>
 #include <assert.h>
+#include <argp.h>
 
 
 // ============================================== defines
 
-#define NEO_VERSION "0.0.1"
 #define NEO_HEADER 2
 #define NEO_FOOTER 2
+#define NEO_SCROLL_MARGIN 1
 
 enum editorFlag {
 	EF_DIRTY =    0x01,		// File has been modified and should be saved before closing.
@@ -42,9 +43,6 @@ enum editorState {
 	ES_OPEN = 1,			// Normal state for reading user input & drawing to the screen.
 	ES_PROMPT,				// Prompting user for input on the status bar.
 	ES_MENU,				// Selecting an option from a menu group.
-	//ES_MENU_FILE,			// Selecting file menu option.
-	//ES_MENU_EDIT,			// Selecting edit menu option.
-	//ES_MENU_HELP,			// Selecting help menu option.
 	ES_SHOULD_CLOSE			// Editing has finished and the program should clean up & terminate.
 };
 
@@ -54,6 +52,14 @@ enum editorDirection {
 	ED_LEFT  = 0x04,
 	ED_RIGHT = 0x08,
 };
+
+extern int status_code;
+
+
+// ============================================== argument parsing
+
+extern const char* argp_program_version;
+extern const char* argp_program_bug_address;
 
 
 // ============================================== meta functionality
@@ -305,7 +311,7 @@ void pageSave(editorContext* ctx, editorPage* page);
 
 /// @brief Set the complete filename of a page.
 /// @param page Page pointer
-/// @param filename Full filename, including path and basename
+/// @param filename Full path to file (or NULL to clear)
 void pageSetFullFilename(editorPage* page, char* fullFilename);
 
 /// @brief Get whichever number the page is in the tab list.
@@ -389,14 +395,19 @@ bool editorCloseAll(editorContext* ctx);
 /// @param prompt Formatted strings
 void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt);
 
+/// @brief Close the editor and return an error value.
+/// @param ctx Context pointer
+/// @param error Error value
+void editorAbort(editorContext* ctx, int error);
+
 
 // ============================================== menu actions
 
 /// @brief Callback function for the Help->About menu entry.
 void cbMenuHelpAbout(void* data, int num);
 
-extern const char _help_docs_contents[];
-extern const char _help_docs_filename[];
+extern const char help_docs_contents[];
+extern const char help_docs_filename[];
 
 
 // ============================================== functional macros
@@ -426,8 +437,6 @@ extern const char _help_docs_filename[];
 	#define MIN(a, b) ((a) < (b)) ? (a) : (b)
 	#define MAX(a, b) ((a) > (b)) ? (a) : (b)
 #endif
-
-#define NEO_SCROLL_MARGIN 1
 
 #define CTRL_KEY(x) ((x) & 0x1f)
 

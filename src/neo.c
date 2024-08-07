@@ -548,8 +548,15 @@ void pageSave(editorContext* ctx, editorPage* page) {
 void pageSetFullFilename(editorPage* page, char* fullFilename) {
 	if (!page) { return; }
 
-	page->fullFilename = strdup(fullFilename);
-	page->filename = strdup(basename(fullFilename));
+	if (fullFilename) {
+		page->fullFilename = strdup(fullFilename);
+		page->filename = strdup(basename(fullFilename));
+	} else {
+		free(page->fullFilename);
+		free(page->filename);
+		page->fullFilename = NULL;
+		page->filename = NULL;
+	}
 }
 
 int pageGetNumber(editorContext* ctx, editorPage* page) {
@@ -594,6 +601,7 @@ void editorInit(editorContext* ctx) {
 	entry.name = "Open"; entry.shortcut = 'o'; menuGroupInsert(menuFile, -1, entry);
 	menuGroupInsert(menuFile, -1, spacer);
 	entry.name = "Save"; entry.shortcut = 's'; menuGroupInsert(menuFile, -1, entry);
+	entry.name = "Save As"; entry.shortcut = 'b'; menuGroupInsert(menuFile, -1, entry);
 	entry.name = "Save All"; entry.shortcut = 'd'; menuGroupInsert(menuFile, -1, entry);
 	menuGroupInsert(menuFile, -1, spacer);
 	entry.name = "Next Tab"; entry.shortcut = 't'; menuGroupInsert(menuFile, -1, entry);
@@ -604,6 +612,8 @@ void editorInit(editorContext* ctx) {
 	entry.name = "Cut"; entry.shortcut = 'x'; menuGroupInsert(menuEdit, -1, entry);
 	entry.name = "Copy"; entry.shortcut = 'c'; menuGroupInsert(menuEdit, -1, entry);
 	entry.name = "Paste"; entry.shortcut = 'v'; menuGroupInsert(menuEdit, -1, entry);
+	menuGroupInsert(menuEdit, -1, spacer);
+	entry.name = "Select All"; entry.shortcut = 'a'; menuGroupInsert(menuEdit, -1, entry);
 	menuGroupInsert(menuEdit, -1, spacer);
 	entry.name = "Undo"; entry.shortcut = 'z'; menuGroupInsert(menuEdit, -1, entry);
 	entry.name = "Redo"; entry.shortcut = 'y'; menuGroupInsert(menuEdit, -1, entry);
@@ -627,7 +637,7 @@ void editorClear(editorContext* ctx) {
 }
 
 void editorUpdate(editorContext* ctx) {
-	if (!ctx) { return; }
+	if (!ctx) { editorAbort(ctx, 1); }
 
 	// Query terminfo for window size
 	if (_neo_flag_resized) {
@@ -657,7 +667,7 @@ int editorGetState(editorContext* ctx) {
 }
 
 void editorPrint(editorContext* ctx) {
-	if (!ctx) { return; }
+	if (!ctx) { editorAbort(ctx, 1); }
 
 	// Calculate rendered cursor position
 	editorPage* currPage = EDITOR_CURR_PAGE(ctx);
@@ -928,64 +938,82 @@ void editorPrintMenu(editorContext* ctx, menuGroup* grp, int off) {
 	(void)(ctx);
 	if (!ctx || !grp || off < 0) { return; }
 
+	// Calculate menu width
+	int menuLen = 0;
+	for(int i=0; i<grp->numEntries; ++i) {
+		menuEntry entry = grp->entries[i];
+		if (!entry.name) { continue; }
+		int entryLen = strlen(entry.name) + 1;
+		if (isalnum(entry.shortcut)) {
+			if (isdigit(entry.shortcut)) { entryLen += 4; }
+			else { entryLen += 8; }
+		}
+		menuLen = MAX(menuLen, entryLen);
+	}
+	#define menuPrintLn(c) addch(c); for(int _c=0; _c<menuLen; ++_c) { addch('_'); } addch(c);
+
+	// Print menu box
 	attron(A_REVERSE);
 	move(1, off);
-	printw(",__________________,");
+	menuPrintLn(',');
 	int i=0;
 	for(; i<grp->numEntries; ++i) {
 		move(i + NEO_HEADER, off);
 		menuEntry entry = grp->entries[i];
 		if (!entry.name) {
-			printw("|__________________|");
+			// Seperator
+			menuPrintLn('|');
 		} else {
+			// Print name
 			addch('|');
 			if (grp->selected == i) { attroff(A_REVERSE); }
 			int len = strlen(entry.name);
 			addstr(entry.name);
 			
+			// Print shortcut
 			if (isalnum(entry.shortcut)) {
 				if (isdigit(entry.shortcut)) {
-					while(len < 14) { addch(' '); len++; }
+					while(len < (menuLen - 4)) { addch(' '); len++; }
 					addstr("(F");
 					addch(entry.shortcut);
 					addch(')');
 				} else {
-					while(len < 10) { addch(' '); len++; }
+					while(len < (menuLen - 8)) { addch(' '); len++; }
 					addstr("(Ctrl-");
 					addch(toupper(entry.shortcut));
 					addch(')');
 				}
 			} else {
-				printw("             ");
+				while(len < menuLen) { addch(' '); len++; }
 			}
 			if (grp->selected == i) { attron(A_REVERSE); }
 			addch('|');
 		}
 	}
 	move(i + NEO_HEADER, off);
-	printw("|__________________|");
+	menuPrintLn('|');
 	attroff(A_REVERSE);
 }
 
 void editorHandleInput(editorContext* ctx, int key) {
-	if (!ctx) { return; }
+	if (!ctx) { editorAbort(ctx, 1); }
 
-	editorPage* page = EDITOR_CURR_PAGE(ctx);
+	editorPage* currPage = EDITOR_CURR_PAGE(ctx);
+	editorRow* currRow = PAGE_CURR_ROW(currPage);
 	switch(ctx->state) {
 		case ES_OPEN: {
 			switch(key) {
-				case KEY_LEFT: pageMoveCursor(ctx, page, ED_LEFT, 1); break;
-				case KEY_RIGHT: pageMoveCursor(ctx, page, ED_RIGHT, 1); break;
-				case KEY_UP: pageMoveCursor(ctx, page, ED_UP, 1); break;
-				case KEY_DOWN: pageMoveCursor(ctx, page, ED_DOWN, 1); break;
-				case KEY_PPAGE: pageMoveCursor(ctx, page, ED_UP, ctx->screenRows); break;
-				case KEY_NPAGE: pageMoveCursor(ctx, page, ED_DOWN, ctx->screenRows); break;
+				case KEY_LEFT: pageMoveCursor(ctx, currPage, ED_LEFT, 1); break;
+				case KEY_RIGHT: pageMoveCursor(ctx, currPage, ED_RIGHT, 1); break;
+				case KEY_UP: pageMoveCursor(ctx, currPage, ED_UP, 1); break;
+				case KEY_DOWN: pageMoveCursor(ctx, currPage, ED_DOWN, 1); break;
+				case KEY_PPAGE: pageMoveCursor(ctx, currPage, ED_UP, ctx->screenRows); break;
+				case KEY_NPAGE: pageMoveCursor(ctx, currPage, ED_DOWN, ctx->screenRows); break;
 				case KEY_HOME: {
-					page->cx = 0;
+					pageSetCursorCol(currPage, 0);
 				} break;
 				case KEY_END: {
-					editorRow* row = (page->cy >= page->numRows) ? NULL : &page->rows[page->cy];
-					page->cx = (!row) ? 0 : row->text.size; 
+					pageSetCursorCol(currPage, -1);
 				} break;
 				case KEY_SLEFT: {
 					editorSetMessage(ctx, "Shift-Left");
@@ -998,6 +1026,12 @@ void editorHandleInput(editorContext* ctx, int key) {
 				} break;
 				case KEY_SF: {
 					editorSetMessage(ctx, "Shift-Down");
+				} break;
+				case KEY_SHOME: {
+					editorSetMessage(ctx, "Shift-Home");
+				} break;
+				case KEY_SEND: {
+					editorSetMessage(ctx, "Shift-End");
 				} break;
 				case KEY_F(1): {
 					editorOpenPage(ctx, NULL, 0);
@@ -1025,8 +1059,21 @@ void editorHandleInput(editorContext* ctx, int key) {
 						editorOpenPage(ctx, NULL, -1);
 					}
 				} break;
+				case CTRL_KEY('b'): {
+					pageSetFullFilename(currPage, NULL);
+					if (PAGE_FLAG_ISCLEAR(currPage, EF_READONLY)) {
+						PAGE_FLAG_SET(currPage, EF_DIRTY);
+					}
+					pageSave(ctx, currPage);
+				} break;
+				case CTRL_KEY('d'): {
+					for(int pageIdx=0; pageIdx<ctx->numPages; ++pageIdx) {
+						editorPage* page = &ctx->pages[pageIdx];
+						pageSave(ctx, page);
+					}
+				} break;
 				case CTRL_KEY('s'): {
-					pageSave(ctx, EDITOR_CURR_PAGE(ctx));
+					pageSave(ctx, currPage);
 				} break;
 				case CTRL_KEY('n'): {
 					editorOpenPage(ctx, NULL, -1);
@@ -1036,11 +1083,10 @@ void editorHandleInput(editorContext* ctx, int key) {
 					editorPrompt(ctx, &input, "Open file: %s");
 					if (input.data) {
 						if (editorOpenPage(ctx, input.data, -1)) {
-							if (ctx->numPages == 2) {
-								editorPage* page = &ctx->pages[0];
-								if (!page->filename && PAGE_FLAG_ISCLEAR(page, EF_DIRTY)) {
-									editorClosePage(ctx, ctx->currPage, false);
-								}
+							// Override blank page
+							editorPage* lastPage = &ctx->pages[ctx->currPage - 1];
+							if (lastPage && !lastPage->filename && PAGE_FLAG_ISCLEAR(lastPage, EF_DIRTY)) {
+								editorClosePage(ctx, ctx->currPage - 1, false);
 							}
 						}
 						strbufClear(&input);
@@ -1055,90 +1101,89 @@ void editorHandleInput(editorContext* ctx, int key) {
 				case CTRL_KEY('v'): {
 					editorSetMessage(ctx, "Paste");
 				} break;
+				case CTRL_KEY('a'): {
+					editorSetMessage(ctx, "Select All");
+				} break;
 				case CTRL_KEY('f'): { ctx->state = ES_MENU; ctx->currMenu = 0; } break;
 				case CTRL_KEY('e'): { ctx->state = ES_MENU; ctx->currMenu = 1; } break;
 				case CTRL_KEY('h'): { ctx->state = ES_MENU; ctx->currMenu = 2; } break;
 				case KEY_BACKSPACE: {
-					if (PAGE_FLAG_ISSET(page, EF_READONLY)) { 
+					if (PAGE_FLAG_ISSET(currPage, EF_READONLY)) { 
 						editorSetMessage(ctx, "File is in read-only mode!");
 						break; 
 					}
-					editorRow* row = PAGE_CURR_ROW(page);
-					if (row) {
-						if (page->cx == 0 && page->cy > 0) {
+					if (currRow) {
+						if (currPage->cx == 0 && currPage->cy > 0) {
 							// Merge text with previous line
-							editorRow* lastRow = &page->rows[page->cy - 1];
+							editorRow* lastRow = &currPage->rows[currPage->cy - 1];
 							strbuf temp;
-							strbufInit(&temp, row->text.size + 1);
-							strbufAppend(&temp, row->text.data, row->text.size);
-							pageDeleteRow(page, page->cy);
+							strbufInit(&temp, currRow->text.size + 1);
+							strbufAppend(&temp, currRow->text.data, currRow->text.size);
+							pageDeleteRow(currPage, currPage->cy);
 							rowInsert(lastRow, -1, temp.data, temp.size);
-							pageMoveCursor(ctx, page, ED_UP, 1);
-							pageSetCursorCol(page, lastRow->text.size - temp.size);
+							pageMoveCursor(ctx, currPage, ED_UP, 1);
+							pageSetCursorCol(currPage, lastRow->text.size - temp.size);
 							strbufClear(&temp);
 						} else {
-							pageMoveCursor(ctx, page, ED_LEFT, 1);
-							rowDelete(row, page->cx, 1);
+							pageMoveCursor(ctx, currPage, ED_LEFT, 1);
+							rowDelete(currRow, currPage->cx, 1);
 						}
 					}
 				} break;
 				case KEY_DC: {
-					if (PAGE_FLAG_ISSET(page, EF_READONLY)) { 
+					if (PAGE_FLAG_ISSET(currPage, EF_READONLY)) { 
 						editorSetMessage(ctx, "File is in read-only mode!");
 						break; 
 					}
-					editorRow* row = PAGE_CURR_ROW(page);
-					if (row) {
-						if (page->cx == (int)row->text.size && page->cy < page->numRows - 1) {
+					if (currRow) {
+						if (currPage->cx == (int)currRow->text.size && currPage->cy < currPage->numRows - 1) {
 							// Bring next line onto current line
-							editorRow* nextRow = &page->rows[page->cy + 1];
+							editorRow* nextRow = &currPage->rows[currPage->cy + 1];
 							strbuf temp;
 							strbufInit(&temp, nextRow->text.size + 1);
 							strbufAppend(&temp, nextRow->text.data, nextRow->text.size);
-							pageDeleteRow(page, page->cy + 1);
-							rowInsert(row, -1, temp.data, temp.size);
+							pageDeleteRow(currPage, currPage->cy + 1);
+							rowInsert(currRow, -1, temp.data, temp.size);
 							strbufClear(&temp);
-						} else if (page->cx < (int)row->text.size) {
-							rowDelete(row, page->cx, 1);
+						} else if (currPage->cx < (int)currRow->text.size) {
+							rowDelete(currRow, currPage->cx, 1);
 						}
 					}
 				} break;
 				case '\n':
 				case '\r':
 				case KEY_ENTER: {
-					if (PAGE_FLAG_ISSET(page, EF_READONLY)) { 
+					if (PAGE_FLAG_ISSET(currPage, EF_READONLY)) { 
 						editorSetMessage(ctx, "File is in read-only mode!");
 						break; 
 					}
-					editorRow* row = PAGE_CURR_ROW(page);
-					if (row) {
+					if (currRow) {
 						// Split text onto a new line
 						strbuf temp;
-						strbufInit(&temp, row->text.size + 1);
-						strbufAppend(&temp, &row->text.data[page->cx], row->text.size - (unsigned int)page->cx);
-						rowDelete(row, page->cx, (int)row->text.size - page->cx);
-						pageInsertRow(page, page->cy + 1, temp.data, temp.size);
-						pageSetCursorCol(page, 0);
-						pageMoveCursor(ctx, page, ED_DOWN, 1);
+						strbufInit(&temp, currRow->text.size + 1);
+						strbufAppend(&temp, &currRow->text.data[currPage->cx], currRow->text.size - (unsigned int)currPage->cx);
+						rowDelete(currRow, currPage->cx, (int)currRow->text.size - currPage->cx);
+						pageInsertRow(currPage, currPage->cy + 1, temp.data, temp.size);
+						pageSetCursorCol(currPage, 0);
+						pageMoveCursor(ctx, currPage, ED_DOWN, 1);
 						strbufClear(&temp);
 					} else {
-						pageInsertRow(page, -1, "", 0);
-						pageMoveCursor(ctx, page, ED_DOWN, 1);
+						pageInsertRow(currPage, -1, "", 0);
+						pageMoveCursor(ctx, currPage, ED_DOWN, 1);
 					}
 				} break;
 				default: {
-					if (PAGE_FLAG_ISSET(page, EF_READONLY)) { 
+					if (PAGE_FLAG_ISSET(currPage, EF_READONLY)) { 
 						editorSetMessage(ctx, "File is in read-only mode!");
 						break; 
 					}
 					if ((!iscntrl(key) && key < 128 && key >= 0) || key == '\t') {
-						editorRow* row = PAGE_CURR_ROW(page);
-						if (!row) {
-							row = pageInsertRow(page, -1, "", 0);
+						if (!currRow) {
+							currRow = pageInsertRow(currPage, -1, "", 0);
 						}
 						char text = (char)(key);
-						rowInsert(row, page->cx, &text, 1);
-						pageMoveCursor(ctx, page, ED_RIGHT, 1);
+						rowInsert(currRow, currPage->cx, &text, 1);
+						pageMoveCursor(ctx, currPage, ED_RIGHT, 1);
 					}
 				} break;
 			}
@@ -1248,8 +1293,8 @@ editorPage* editorOpenPage(editorContext* ctx, char* filename, int internal) {
 			// Internal documents
 			pageFlags |= EF_READONLY;
 			if (internal == 0) {
-				fp = fmemopen((void*)_help_docs_contents, strlen(_help_docs_contents), "r");
-				filename = (char*)&_help_docs_filename[0];
+				fp = fmemopen((void*)help_docs_contents, strlen(help_docs_contents), "r");
+				filename = (char*)&help_docs_filename[0];
 			}
 			if (!fp) {
 				editorSetMessage(ctx, "Failed to open internal file (%d)!", internal);
@@ -1414,39 +1459,49 @@ void editorPrompt(editorContext* ctx, strbuf* buf, const char* prompt) {
 	ctx->state = lastState;
 }
 
+void editorAbort(editorContext* ctx, int error) {
+	// Ungraceful exit
+	if (!ctx) { exit(error); }
+
+	ctx->state = ES_SHOULD_CLOSE;
+	status_code = error;
+}
+
 void cbMenuHelpAbout(void* data, int num) {
 	if (!data) { return; }
 	(void)(num);
 
 	// Extract arguments
 	editorContext* ctx = (editorContext*)(data);
-	editorSetMessage(ctx, "VERSION %s", NEO_VERSION);
+	editorSetMessage(ctx, "VERSION %s", argp_program_version);
 }
 
-const char _help_docs_filename[] = "DOCS";
-const char _help_docs_contents[] = "\
+int status_code = 0;
+
+const char help_docs_filename[] = "DOCS";
+const char help_docs_contents[] = "\
 =====CONCEPTS======\n\
 Status Bar:\n\
 \tThe white bar along the bottom of the screen is for displaying\n\
 \tstatus messages, as well as prompting user input. When opening\n\
 \tor saving a file, for instance, you will be asked to input a\n\
 \tfilename on that bar. Note that you can cancel out of input\n\
-\tprompting at any time with the Quit shortcut, Ctrl-Q. It also\n\
+\tprompting at any time with the Quit shortcut [Ctrl-Q]. It also\n\
 \tdisplays where your cursor is in the file.\n\
 \n\
 Info Bar:\n\
-\tThe bottom line of the screen is reserved for showing information\n\
-\tabout the file itself, such as it's full path, how many lines\n\
-\tare in it, and any special attributes, such as whether it is\n\
-\tread-only.\n\
+\tThe bottom line of the screen is reserved for showing\n\
+\tinformation about the file itself, such as it's full path, how\n\
+\tmany lines are in it, and any special attributes, such as\n\
+\twhether it is read-only.\n\
 \n\
 Menu Bar:\n\
 \tIf you can't remember the key shortcut to perform an action, or\n\
 \tjust don't want to use it, you can open the menu bar to select\n\
 \tan action manually. To close the menu bar and return to editing,\n\
-\teither select an action with Enter(navigating using the arrow keys),\n\
-\tuse the Quit shortcut Ctrl-Q, or use the same shortcut you used\n\
-\tto open the currently active menu.\n\
+\teither select an action with Enter (navigating using the arrow\n\
+\tkeys), use the Quit shortcut [Ctrl-Q], or use the same shortcut\n\
+\tyou used to open the currently active menu.\n\
 \n\
 =====SHORTUCTS=====\n\
 Open menu groups:\n\
