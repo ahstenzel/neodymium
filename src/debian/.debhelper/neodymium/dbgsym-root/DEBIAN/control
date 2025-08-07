@@ -1,0 +1,13 @@
+Package: neodymium-dbgsym
+Package-Type: ddeb
+Source: neodymium
+Version: 0.1.0
+Auto-Built-Package: debug-symbols
+Architecture: amd64
+Maintainer: Alex Stenzel <alexhstenzel@gmail.com>
+Installed-Size: 19
+Depends: neodymium (= 0.1.0)
+Section: debug
+Priority: optional
+Description: debug symbols for neodymium
+Build-Ids: d6c8e1b7a699259e3ed7e9f54ee5f5d943cf3196

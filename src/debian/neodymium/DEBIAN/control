@@ -1,0 +1,9 @@
+Package: neodymium
+Version: 0.1.0
+Architecture: amd64
+Maintainer: Alex Stenzel <alexhstenzel@gmail.com>
+Installed-Size: 56
+Depends: ncurses-base
+Section: editors
+Priority: optional
+Description: terminal text editor.
