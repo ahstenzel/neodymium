@@ -2,7 +2,7 @@ Package: neodymium
 Version: 0.1.0
 Architecture: amd64
 Maintainer: Alex Stenzel <alexhstenzel@gmail.com>
-Installed-Size: 56
+Installed-Size: 32
 Depends: ncurses-base
 Section: editors
 Priority: optional
