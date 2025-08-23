@@ -57,7 +57,7 @@ fi
 : ${DIALOG_ITEM_HELP=4}
 : ${DIALOG_ESC=255}
 
-# Create a temporary file and make sure it goes away when we're dome
+# Create a temporary file and make sure it goes away when we're done
 temp_file=$(tempfile 2>/dev/null) || temp_file=/tmp/test$$
 trap "rm -f $temp_file" 0 1 2 5 15
 

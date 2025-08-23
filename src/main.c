@@ -1,4 +1,4 @@
-#include <ncurses.h>
+#include "neo.h"
 #define VEX_IMPLEMENTATION
 #include <vex/vex.h>
 #undef VEX_IMPLEMENTATION
@@ -38,5 +38,5 @@ int main(int argc, char** argv) {
 
 	// Run event loop
 	
-	return 0;
+	return _neo_status_code;
 }

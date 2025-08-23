@@ -1,7 +1,7 @@
 prefix = /usr
 CC = gcc
 CFLAGS = -Wall -Wextra -Wno-missing-field-initializers -std=gnu99 -I../vendor -I../vendor/vex/include -DVERSION=\"$(file <VERSION)\"
-LFLAGS = -lc -lncurses
+LFLAGS = -lc -lmenu -lncurses
 
 all: neodymium
 

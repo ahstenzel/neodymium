@@ -12,6 +12,8 @@ fi
 apt install make build-essential debhelper git libncurses-dev
 
 # Get repositories
-cd ../vendor
+cd ..
+mkdir -p vendor
+cd vendor
 git clone https://github.com/ahstenzel/vex.git
 cd ${SCRIPT_DIR}
