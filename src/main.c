@@ -1,4 +1,5 @@
 #include "neo.h"
+#include "neo_string.h"
 #define VEX_IMPLEMENTATION
 #include <vex/vex.h>
 #undef VEX_IMPLEMENTATION
@@ -38,5 +39,5 @@ int main(int argc, char** argv) {
 
 	// Run event loop
 	
-	return _neo_status_code;
+	return NEO_ERRORNO;
 }

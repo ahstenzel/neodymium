@@ -9,7 +9,7 @@ if [[ $(id -u) -ne 0 ]]; then
 fi
 
 # Install packages
-apt install make build-essential debhelper git libncurses-dev
+apt install make build-essential devscripts debhelper git libncurses-dev dialog
 
 # Get repositories
 cd ..
