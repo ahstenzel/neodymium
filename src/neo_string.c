@@ -1,6 +1,24 @@
 #include "neo.h"
 #include "neo_string.h"
 
+static bool _string_check_resize(string_t *str, size_t len) {
+	assert(str && str->capacity >= (str->length + 1));
+	if (len == 0) { return true; }
+	while (str->capacity == 0 || str->length + len >= (str->capacity - 1)) {
+		size_t new_capacity = str->capacity * 2;
+		if (new_capacity == 0) { new_capacity = NEO_STR_DEFAULT_CAPACITY; }
+		char* new_data = NEO_REALLOC(str->data, new_capacity);
+		if (!new_data) { return false; }
+		str->data = new_data;
+		str->capacity = new_capacity;
+	}
+	return true;
+}
+
+static bool _string_valid(string_t *str) {
+	return (str && str->data && str->capacity >= (str->length + 1));
+}
+
 bool string_init(string_t *str) {
 	// Validate string
 	NEO_CLEAR_ERROR;
@@ -296,22 +314,4 @@ bool string_equal(string_t *str1, string_t *str2) {
 	// Compare strings
 	if (str1->length != str2->length) { return false; }
 	return (strncmp(str1->data, str2->data, str1->length) == 0);
-}
-
-bool _string_check_resize(string_t *str, size_t len) {
-	assert(str && str->capacity >= (str->length + 1));
-	if (len == 0) { return true; }
-	while (str->capacity == 0 || str->length + len >= (str->capacity - 1)) {
-		size_t new_capacity = str->capacity * 2;
-		if (new_capacity == 0) { new_capacity = NEO_STR_DEFAULT_CAPACITY; }
-		char* new_data = NEO_REALLOC(str->data, new_capacity);
-		if (!new_data) { return false; }
-		str->data = new_data;
-		str->capacity = new_capacity;
-	}
-	return true;
-}
-
-bool _string_valid(string_t *str) {
-	return (str && str->data && str->capacity >= (str->length + 1));
 }
