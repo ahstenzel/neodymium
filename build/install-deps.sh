@@ -16,4 +16,5 @@ cd ..
 mkdir -p vendor
 cd vendor
 git clone https://github.com/ahstenzel/vex.git
+git clone https://github.com/avaneev/komihash.git
 cd ${SCRIPT_DIR}

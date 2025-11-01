@@ -64,6 +64,7 @@ src/debian/neodymium.substvars
 
 # Vendor libraries
 vendor/vex
+vendor/komihash
 
 # Documentation
 docs/html/

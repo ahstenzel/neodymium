@@ -1,5 +1,4 @@
 #include "neo.h"
-#include "neo_string.h"
 #define VEX_IMPLEMENTATION
 #include <vex/vex.h>
 #undef VEX_IMPLEMENTATION

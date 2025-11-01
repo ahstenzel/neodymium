@@ -1,4 +1,4 @@
-#include "neo.h"
+#include "neo_common.h"
 
 int _neo_error_code = NERROR_SUCCESS;
 char _neo_error_msg[NEO_MSG_BUFLEN] = { '\0' };

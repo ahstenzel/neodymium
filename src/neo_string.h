@@ -8,26 +8,27 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 /**
  * @brief Default capacity for a newly initialized string.
  */
-#define NEO_STR_DEFAULT_CAPACITY 128
+#define NEO_STRING_DEFAULT_CAPACITY 128
 
 /**
  * @brief Dynamically resizing null-terminated text buffer.
  */
 typedef struct {
-	char* data;         /**< Character data. */
-	size_t length;      /**< Length of the string (not counting the null termintor). */ 
-	size_t capacity;    /**< Internal size of the character buffer. */
+	char* data;         /** Character data. */
+	size_t length;      /** Length of the string (not counting the null termintor). */ 
+	size_t capacity;    /** Internal size of the character buffer. */
 } string_t;
 
 /**
  * @brief Initialize a string structure.
  * @details
  * This takes an existing string structure that has been default constructed and allocates memory
- * for it according to the NEO_STR_DEFAULT_CAPACITY. It is considered valid at this point, and
+ * for it according to the NEO_STRING_DEFAULT_CAPACITY. It is considered valid at this point, and
  * must be cleared before the program ends to prevent memory leaks.
  * @param str String pointer
  * @return True if successful
@@ -49,16 +50,18 @@ void string_clear(string_t* str);
  * @param pos Position to insert at
  * @param insert Text to insert
  * @param len Number of characters to insert
+ * @return True if successful
  */
-void string_insert(string_t* str, size_t pos, const char* insert, size_t len);
+bool string_insert(string_t* str, size_t pos, const char* insert, size_t len);
 
 /**
  * @brief Erase characters from the string.
  * @param str String pointer
  * @param pos Position to erase at
  * @param len Number of characters to erase
+ * @return True if successful
  */
-void string_erase(string_t* str, size_t pos, size_t len);
+bool string_erase(string_t* str, size_t pos, size_t len);
 
 /**
  * @brief Erase all characters from the string.
@@ -67,16 +70,18 @@ void string_erase(string_t* str, size_t pos, size_t len);
  * clear() in that it does not deallocate memory, and leaves the string in a valid state to
  * perform operations later.
  * @param str String pointer
+ * @return True if successful
  */
-void string_erase_all(string_t* str);
+bool string_erase_all(string_t* str);
 
 /**
  * @brief Append characters to the end of the string.
  * @param str String pointer
  * @param insert Text to insert
  * @param len Number of characters to insert
+ * @return True if successful
  */
-void string_append(string_t* str, const char* insert, size_t len);
+bool string_append(string_t* str, const char* insert, size_t len);
 
 /**
  * @brief Overwrite text in the string.
@@ -88,34 +93,39 @@ void string_append(string_t* str, const char* insert, size_t len);
  * @param pos Position to write at
  * @param insert Text to write
  * @param len Number of characters to overwrite
+ * @return True if successful
  */
-void string_set(string_t* str, size_t pos, const char* insert, size_t len);
+bool string_set(string_t* str, size_t pos, const char* insert, size_t len);
 
 /**
  * @brief Add one character to the end of the string.
  * @param str String pointer
  * @param insert Character to add
+ * @return True if successful
  */
-void string_push_back(string_t* str, char insert);
+bool string_push_back(string_t* str, char insert);
 
 /**
  * @brief Remove one character from the end of the string.
  * @param str String pointer
+ * @return True if successful
  */
-void string_pop_back(string_t* str);
+bool string_pop_back(string_t* str);
 
 /**
  * @brief Add one character to the start of the string.
  * @param str String pointer
  * @param insert Character to add
+ * @return True if successful
  */
-void string_push_front(string_t* str, char insert);
+bool string_push_front(string_t* str, char insert);
 
 /**
  * @brief Remove one character from the start of the string.
  * @param str String pointer
+ * @return True if successful
  */
-void string_pop_front(string_t* str);
+bool string_pop_front(string_t* str);
 
 /**
  * @brief Get a character at a position in the string.
