@@ -83,6 +83,7 @@ bool neo_menu_group_init(neo_menu_group_t* group) {
 
 	// Initialize string
 	if (!string_init(&group->name)) {
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize menu group name");
 		return false;
 	}
 
@@ -136,9 +137,11 @@ neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int posit
 	// Create string
 	string_t name_str = {0};
 	if (!string_init(&name_str)) {
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize menu entry name");
 		return NULL;
 	}
 	if (!string_set(&name_str, 0, entry_name, strlen(entry_name))) {
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to set menu entry name");
 		return NULL;
 	}
 
@@ -301,9 +304,11 @@ neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, c
 	// Initialize group
 	neo_menu_group_t* new_group = {0};
 	if (!neo_menu_group_init(&new_group)) {
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize menu group");
 		return NULL;
 	}
 	if (!string_set(&(new_group->name), 0, group_name, strlen(group_name))) {
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to set menu group name");
 		return NULL;
 	}
 	new_group->shortcut = group_shortcut;

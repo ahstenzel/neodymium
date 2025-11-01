@@ -95,21 +95,33 @@ bool neo_edit_row_update(neo_edit_row_t* row) {
 	if (!tab_length) { tab_length++; }
 
 	// Iterate through string
-	string_erase_all(&row->rcontent);
+	if (!string_erase_all(&row->rcontent)) {
+		return false;
+	}
+	bool ret = true;
 	for(size_t j = 0; j < row->content.length; ++j) {
 		char c = string_at(&row->content, j);
 		if (c == '\t') {
-			string_push_back(&row->rcontent, ' ');
+			if (!string_push_back(&row->rcontent, ' ')) { 
+				ret = false;
+				break;
+			}
 			while(row->rcontent.length % tab_length != 0) {
-				string_push_back(&row->rcontent, ' ');
+				if (!string_push_back(&row->rcontent, ' ')) {
+					ret = false;
+					break;
+				}
 			}
 		}
 		else {
-			string_push_back(&row->rcontent, c);
+			if (!string_push_back(&row->rcontent, c)) {
+				ret = false;
+				break;
+			}
 		}
 	}
 	row->dirty = false;
-	return true;
+	return ret;
 }
 
 size_t neo_edit_row_cursor_update(neo_edit_row_t* row, size_t cx) {

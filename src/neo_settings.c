@@ -137,7 +137,8 @@ void neo_settings_insert(neo_settings_t* settings, const char* key, neo_settings
 		return; 
 	}
 	if (!key || strlen(key) == 0) {
-		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid key");
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid settings key");
+		return;
 	}
 	if (!_neo_settings_check_resize(settings)) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to resize settings map");
@@ -162,7 +163,7 @@ void neo_settings_remove(neo_settings_t* settings, const char* key) {
 		return; 
 	}
 	if (!key || strlen(key) == 0) {
-		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid key");
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid settings key");
 		return;
 	}
 
@@ -171,7 +172,10 @@ void neo_settings_remove(neo_settings_t* settings, const char* key) {
 	if (!_neo_settings_meta_get(
 		settings->keys, settings->vals, settings->capacity,
 		key, strlen(key), &idx
-	)) { return; }
+	)) { 
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Failed to find settings key");
+		return; 
+	}
 
 	// Clear element
 	NEO_FREE(settings->keys[idx]);
@@ -186,7 +190,7 @@ bool neo_settings_get(neo_settings_t* settings, const char* key, neo_settings_va
 		return false; 
 	}
 	if (!key || strlen(key) == 0) {
-		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid key");
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid settings key");
 		return false;
 	}
 
@@ -195,7 +199,10 @@ bool neo_settings_get(neo_settings_t* settings, const char* key, neo_settings_va
 	if (!_neo_settings_meta_get(
 		settings->keys, settings->vals, settings->capacity,
 		key, strlen(key), &idx
-	)) { return false; }
+	)) { 
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Failed to find settings key");
+		return false; 
+	}
 
 	// Get element
 	if (val) { *val = settings->vals[idx]; }

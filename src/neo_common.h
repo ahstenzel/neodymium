@@ -83,6 +83,7 @@ extern char _neo_error_msg[NEO_MSG_BUFLEN];
 #define NEO_THROW_ERROR_MSG(x, msg) do { \
 	NEO_ERRORNO = x; \
 	snprintf(NEO_ERRORMSG, sizeof(NEO_ERRORMSG), "Error in function (%s): %s [%s]", __func__, #x, msg); \
+	fprintf(stderr, "%s\n", NEO_ERRORMSG); \
 } while(0)
 
 /**
@@ -92,6 +93,7 @@ extern char _neo_error_msg[NEO_MSG_BUFLEN];
 #define NEO_THROW_ERROR(x) do { \
 	NEO_ERRORNO = x; \
 	snprintf(NEO_ERRORMSG, sizeof(NEO_ERRORMSG), "Error in function (%s): %s", __func__, #x); \
+	fprintf(stderr, "%s\n", NEO_ERRORMSG); \
 } while(0)
 
 /**

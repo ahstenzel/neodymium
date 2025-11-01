@@ -157,7 +157,7 @@ bool string_push_back(string_t *str, char insert) {
 		return false; 
 	}
 	if (!_string_check_resize(str, 1)) {
-		NEO_THROW_ERROR(NERROR_BAD_ALLOC);
+		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to resize string");
 		return false;
 	}
 
@@ -218,11 +218,16 @@ char string_at(string_t *str, size_t pos) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return '\0'; 
 	}
-	if (pos >= str->length) {
+	if (pos == str->length) {
+		return '\0';
+	}
+	else if (pos > str->length) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
 		return '\0';
 	}
-	return str->data[pos];
+	else {
+		return str->data[pos];
+	}
 }
 
 bool string_empty(string_t *str) {
