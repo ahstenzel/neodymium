@@ -12,10 +12,7 @@
 #include <stdio.h>
 #include "neo_string.h"
 #include "neo_settings.h"
-
-#define NEO_HEADER 2
-#define NEO_FOOTER 2
-#define NEO_SCROLL_MARGIN 1
+#include "neo_menu.h"
 
 /**
  * @brief Default number of rows for a newly initialized editor page.
@@ -33,12 +30,37 @@
 #define NEO_EDIT_MAX_OPEN_FILES FOPEN_MAX
 
 /**
+ * @brief Maximum status message length.
+ */
+#define NEO_EDIT_MAX_STATUS_MESSAGE_LEN 79u
+
+/**
  * @brief Flags that define properties of a page in the editor.
  */
 typedef enum {
 	NPAGE_FLAG_DIRTY =    0x01,   // File has been modified and should be saved before closing.
 	NPAGE_FLAG_READONLY = 0x02    // File is marked as read-only and cannot be modified or saved.
 } neo_page_flag_t;
+
+/**
+ * @brief Check if a flag for the page is set to 1.
+ */
+#define PAGE_FLAG_ISSET(p, f) (((p)->flags & (f)) != 0)
+
+/**
+ * @brief Check if a flag for the page is set to 0
+ */
+#define PAGE_FLAG_ISCLEAR(p, f) (((p)->flags & (f)) == 0)
+
+/**
+ * @brief Set a flag for the page to 1.
+ */
+#define PAGE_FLAG_SET(p, f) ((p)->flags |= (f))
+
+/**
+ * @brief Set a flag for the page to 0.
+ */
+#define PAGE_FLAG_CLEAR(p, f) ((p)->flags &= ~(f))
 
 /**
  * @brief Current state of the editor.
@@ -80,12 +102,16 @@ struct neo_edit_row_t {
 struct neo_edit_page_t {
 	struct neo_edit_ctx_t* context;
 	struct neo_edit_row_t* rows;
+	WINDOW* nc_window;
+	PANEL* nc_panel;
 	string_t filename;
 	size_t num_rows;
 	size_t max_rows;
 	size_t num_cols;
 	size_t row_off, col_off;
 	size_t cursor_x, cursor_y, rcursor_x, rcursor_y;
+	size_t window_rows;
+	size_t window_cols;
 	neo_page_flag_t flags;
 };
 
@@ -94,12 +120,21 @@ struct neo_edit_page_t {
  */
 struct neo_edit_ctx_t {
 	struct neo_edit_page_t* pages;
+	WINDOW* nc_window;
+	PANEL* nc_panel;
 	neo_settings_t settings;
+	neo_menu_bar_t menu_bar;
+	time_t status_timer;
+	string_t status_message;
 	size_t num_pages;
 	size_t max_pages;
 	size_t curr_page;
+	size_t window_rows;
+	size_t window_cols;
 	neo_state_t state;
 };
+
+#define EDITOR_GET_CURR_PAGE(ctx) ((ctx) && (ctx)->curr_page < (ctx)->num_pages) ? &(ctx)->pages[(ctx)->curr_page] : NULL
 
 typedef struct neo_edit_row_t neo_edit_row_t;
 typedef struct neo_edit_page_t neo_edit_page_t;
@@ -175,6 +210,13 @@ void neo_edit_page_clear(neo_edit_page_t* page);
  * @return True if successful
  */
 bool neo_edit_page_update(neo_edit_page_t* page);
+
+/**
+ * @brief Draw the contents of the page to its window.
+ * @param page Page pointer
+ * @return True if successful
+ */
+bool neo_edit_page_draw(neo_edit_page_t* page);
 
 /**
  * @brief Get the row at the given position.
@@ -261,5 +303,44 @@ void neo_edit_ctx_clear(neo_edit_ctx_t* context);
  * @return True if successful
  */
 bool neo_edit_ctx_update(neo_edit_ctx_t* context);
+
+/**
+ * @brief Render the full context, including menu bar and pages.
+ * @param context Context pointer
+ * @return True if successful
+ */
+bool neo_edit_ctx_draw(neo_edit_ctx_t* context);
+
+/**
+ * @brief Open a file as a new page.
+ * @param context Context pointer
+ * @param filename Full filename
+ * @return Index of new page (or SIZE_MAX on error)
+ */
+size_t neo_edit_ctx_open_file(neo_edit_ctx_t* context, char* filename);
+
+/**
+ * @brief Open a new blank page.
+ * @param context Context pointer
+ * @return Index of new page (or SIZE_MAX on error)
+ */
+size_t neo_edit_ctx_new_file(neo_edit_ctx_t* context);
+
+/**
+ * @brief Respond to keyboard input.
+ * @param context Context pointer
+ * @param key Keyboard code
+ * @return True if successful
+ */
+bool neo_edit_ctx_handle_input(neo_edit_ctx_t* context, int key);
+
+/**
+ * @brief Set the status message at the bottom of the screen.
+ * @param context Context pointer
+ * @param fmt Formatted message
+ * @param ... printf-style arguments
+ * @return Length of printed message
+ */
+int neo_edit_ctx_status(neo_edit_ctx_t* context, const char* fmt, ...);
 
 #endif // NEO_EDITOR_H

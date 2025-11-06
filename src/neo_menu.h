@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "neo_string.h"
+#include "neo_common.h"
 
 /**
  * @brief Callback function for a menu entry.
@@ -55,8 +56,12 @@ typedef struct neo_menu_group_t neo_menu_group_t;
  */
 struct neo_menu_bar_t {
 	neo_menu_group_t* groups;
+	WINDOW* nc_window;
+	PANEL* nc_panel;
 	size_t num_groups;
 	size_t max_groups;
+	size_t window_rows;
+	size_t window_cols;
 	int selected;
 };
 typedef struct neo_menu_bar_t neo_menu_bar_t;
@@ -141,6 +146,20 @@ bool neo_menu_bar_init(neo_menu_bar_t* bar);
  * @param bar Menu bar pointer
  */
 void neo_menu_bar_clear(neo_menu_bar_t* bar);
+
+/**
+ * @brief Update the state of the menu bar.
+ * @param bar Menu bar pointer
+ * @return True if successful
+ */
+bool neo_menu_bar_update(neo_menu_bar_t* bar);
+
+/**
+ * @brief Draw the menu bar.
+ * @param bar Menu bar pointer
+ * @return True if successful
+ */
+bool neo_menu_bar_draw(neo_menu_bar_t* bar);
 
 /**
  * @brief Create a new menu group and insert it into the bar.

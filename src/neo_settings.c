@@ -117,6 +117,7 @@ bool neo_settings_init(neo_settings_t* settings) {
 	memset(settings->vals, 0, sizeof(*(settings->vals)) * NEO_SETTINGS_DEFAULT_CAPACITY);
 	settings->length = 0;
 	settings->capacity = NEO_SETTINGS_DEFAULT_CAPACITY;
+	return true;
 }
 
 void neo_settings_clear(neo_settings_t* settings) {

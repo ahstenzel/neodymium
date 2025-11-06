@@ -329,3 +329,24 @@ bool string_equal(string_t *str1, string_t *str2) {
 	if (str1->length != str2->length) { return false; }
 	return (strncmp(str1->data, str2->data, str1->length) == 0);
 }
+
+int string_reserve(string_t *str, size_t new_capacity) {
+	// Validate string
+	NEO_CLEAR_ERROR;
+	if (!_string_valid(str)) { 
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
+		return -1; 
+	}
+
+	// Attempt resize
+	if (new_capacity <= NEO_STRING_DEFAULT_CAPACITY) { new_capacity = NEO_STRING_DEFAULT_CAPACITY; }
+	if (new_capacity <= str->capacity) { return str->capacity; }
+	char* new_data = NEO_REALLOC(str->data, new_capacity);
+	if (!new_data) { 
+		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to resize string");
+		return -1; 
+	}
+	str->data = new_data;
+	str->capacity = new_capacity;
+	return new_capacity;
+}

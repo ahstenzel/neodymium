@@ -196,4 +196,12 @@ bool string_substr(string_t* src, size_t pos, size_t len, string_t* dst);
  */
 bool string_equal(string_t* str1, string_t* str2);
 
+/**
+ * @brief Resize the strings buffer to be at least greater than the given capacity.
+ * @param str String pointer
+ * @param new_capacity New capacity
+ * @return New capacity (or -1 on error)
+ */
+int string_reserve(string_t* str, size_t new_capacity);
+
 #endif // NEO_STRING_H

@@ -5,9 +5,15 @@
 #ifndef NEO_COMMON_H
 #define NEO_COMMON_H
 
+#ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
+#endif
+#ifndef _BSD_SOURCE
 #define _BSD_SOURCE
+#endif
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 
 // ============================================== includes
@@ -41,6 +47,27 @@
 #ifndef NEO_FREE
 #define NEO_FREE free
 #endif
+
+#define NEO_SIZE_MENU_BAR 2
+#define NEO_SIZE_FILE_BAR 2
+#define NEO_SIZE_HEADER (NEO_SIZE_MENU_BAR+NEO_SIZE_FILE_BAR)
+#define NEO_SIZE_FOOTER 2
+#define NEO_SCROLL_MARGIN 1
+
+
+// ============================================== functional macros
+
+#if !__STRICT_ANSI__ && __GNUC__ >= 3
+	#define MIN(a,b) ({ __typeof__ (a) _a=(a); __typeof__ (b) _b=(b); _a<_b ? _a : _b; })
+	#define MAX(a,b) ({ __typeof__ (a) _a=(a); __typeof__ (b) _b=(b); _a>_b ? _a : _b; })
+#else
+	#define MIN(a, b) ((a) < (b)) ? (a) : (b)
+	#define MAX(a, b) ((a) > (b)) ? (a) : (b)
+#endif
+
+#define UNUSED(x) ((void)(x))
+
+#define CTRL_KEY(x) ((x) & 0x1f)
 
 
 // ============================================== error logging
@@ -125,5 +152,7 @@ void ncurses_clear();
 void signal_handler(int sig);
 
 extern bool _neo_flag_resized;
+
+extern int _neo_ext_signal;
 
 #endif // NEO_COMMON_H

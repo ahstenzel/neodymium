@@ -41,7 +41,7 @@ static size_t _neo_menu_group_idx_end(neo_menu_group_t* group, int position) {
 	assert(group && group->max_entries >= (group->num_entries + 1));
 	size_t idx = 0;
 	if (position == -1) { idx = group->num_entries; }
-	else if (position >= 0 && position <= group->num_entries) { idx = (size_t)position; }
+	else if (position >= 0 && position <= (int)group->num_entries) { idx = (size_t)position; }
 	else { idx = SIZE_MAX; }
 	return idx;
 }
@@ -50,7 +50,7 @@ static size_t _neo_menu_group_idx_last(neo_menu_group_t* group, int position) {
 	assert(group && group->max_entries >= (group->num_entries + 1));
 	size_t idx = 0;
 	if (position == -1) { idx = group->num_entries - 1; }
-	else if (position >= 0 && position < group->num_entries) { idx = (size_t)position; }
+	else if (position >= 0 && position < (int)group->num_entries) { idx = (size_t)position; }
 	else { idx = SIZE_MAX; }
 	return idx;
 }
@@ -59,7 +59,7 @@ static size_t _neo_menu_bar_idx_end(neo_menu_bar_t* bar, int position) {
 	assert(bar && bar->max_groups >= (bar->num_groups + 1));
 	size_t idx = 0;
 	if (position == -1) { idx = bar->num_groups; }
-	else if (position >= 0 && position <= bar->num_groups) { idx = (size_t)position; }
+	else if (position >= 0 && position <= (int)bar->num_groups) { idx = (size_t)position; }
 	else { idx = SIZE_MAX; }
 	return idx;
 }
@@ -68,7 +68,7 @@ static size_t _neo_menu_bar_idx_last(neo_menu_bar_t* bar, int position) {
 	assert(bar && bar->max_groups >= (bar->num_groups + 1));
 	size_t idx = 0;
 	if (position == -1) { idx = bar->num_groups - 1; }
-	else if (position >= 0 && position < bar->num_groups) { idx = (size_t)position; }
+	else if (position >= 0 && position < (int)bar->num_groups) { idx = (size_t)position; }
 	else { idx = SIZE_MAX; }
 	return idx;
 }
@@ -261,11 +261,24 @@ bool neo_menu_bar_init(neo_menu_bar_t *bar) {
 		return false;
 	}
 	memset(bar->groups, 0, len);
+	int screen_rows, screen_cols;
+	getmaxyx(stdscr, screen_rows, screen_cols);
+	UNUSED(screen_rows);
+	bar->window_cols = MAX(screen_cols, 1);
+	bar->window_rows = NEO_SIZE_MENU_BAR;
+	bar->nc_window = newwin(bar->window_rows, bar->window_cols, 0, 0);
+	if (!bar->nc_window) {
+		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate ncurses window");
+		return false;
+	}
+	bar->nc_panel = new_panel(bar->nc_window);
+	if (!bar->nc_panel) {
+		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate ncurses panel");
+		return false;
+	}
 	bar->num_groups = 0;
 	bar->max_groups = NEO_MENU_BAR_DEFAULT_CAPACITY;
 	bar->selected = -1;
-
-	// Create default menu groups
 
 	return true;
 }
@@ -284,6 +297,45 @@ void neo_menu_bar_clear(neo_menu_bar_t *bar) {
 	bar->selected = -1;
 }
 
+bool neo_menu_bar_update(neo_menu_bar_t *bar) {
+	// Validate bar
+	NEO_CLEAR_ERROR;
+	if (!bar) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");
+		return false;
+	}
+
+	// Update window size
+	if (_neo_flag_resized) {
+		int screen_rows, screen_cols;
+		getmaxyx(stdscr, screen_rows, screen_cols);
+		UNUSED(screen_rows);
+		bar->window_cols = screen_cols;
+		bar->window_rows = NEO_SIZE_MENU_BAR;
+		wresize(bar->nc_window, bar->window_rows, bar->window_cols);
+	}
+	return true;
+}
+
+bool neo_menu_bar_draw(neo_menu_bar_t *bar) {
+	// Validate bar
+	NEO_CLEAR_ERROR;
+	if (!bar) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");
+		return false;
+	}
+
+	// Draw contents
+	wmove(bar->nc_window, 0, 0);
+	for(size_t i = 0; i < bar->num_groups; ++i) {
+		neo_menu_group_t* group = &bar->groups[i];
+		wprintw(bar->nc_window, " %s |", group->name.data);
+	}
+	wmove(bar->nc_window, 1, 0);
+	whline(bar->nc_window, '-', bar->window_cols);
+	return true;
+}
+
 neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, const char *group_name, char group_shortcut) {
 	// Validate bar
 	NEO_CLEAR_ERROR;
@@ -292,7 +344,7 @@ neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, c
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");
 		return NULL;
 	}
-	if ((idx = _neo_menu_bar_idx_end(bar, position)) != SIZE_MAX) {
+	if ((idx = _neo_menu_bar_idx_end(bar, position)) == SIZE_MAX) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
 		return NULL;
 	}
@@ -302,22 +354,23 @@ neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, c
 	}
 
 	// Initialize group
-	neo_menu_group_t* new_group = {0};
+	neo_menu_group_t new_group = { 0 };
 	if (!neo_menu_group_init(&new_group)) {
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize menu group");
 		return NULL;
 	}
-	if (!string_set(&(new_group->name), 0, group_name, strlen(group_name))) {
+	if (!string_set(&new_group.name, 0, group_name, strlen(group_name))) {
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to set menu group name");
 		return NULL;
 	}
-	new_group->shortcut = group_shortcut;
+	new_group.shortcut = group_shortcut;
 
 	// Shift end of group forward
 	size_t n = sizeof(*(bar->groups));
 	memmove(bar->groups + (n * (idx + 1)), bar->groups + (n * idx), n * (bar->num_groups - idx));
 	memcpy(&bar->groups[idx], &new_group, n);
-	return true;
+	bar->num_groups++;
+	return &bar->groups[idx];
 }
 
 neo_menu_group_t* neo_menu_bar_get_group(neo_menu_bar_t* bar, int position) {
@@ -369,8 +422,7 @@ void neo_menu_bar_remove_group(neo_menu_bar_t* bar, int position) {
 	if (bar->num_groups == 0) { return; }
 
 	// Clear entry
-	neo_menu_group_t* group = &bar->groups[idx];
-	neo_menu_group_clear(&group);
+	neo_menu_group_clear(&bar->groups[idx]);
 
 	// Shift end of group backward
 	size_t n = sizeof(*(bar->groups));
