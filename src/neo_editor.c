@@ -1,6 +1,5 @@
 #include "neo_editor.h"
-#include "neo_common.h"
-#include "neo_menu.h"
+#include "neo_actions.h"
 
 static bool _neo_edit_row_valid(neo_edit_row_t* row) {
 	return (row && row->page);
@@ -361,7 +360,7 @@ bool neo_edit_page_draw(neo_edit_page_t* page) {
 	return true;
 }
 
-neo_edit_row_t* neo_edit_page_get_row(neo_edit_page_t* page, int at) {
+neo_edit_row_t* neo_edit_page_get_row(neo_edit_page_t* page, int position) {
 	// Validate page
 	NEO_CLEAR_ERROR;
 	if (!_neo_edit_page_valid(page)) {
@@ -374,8 +373,8 @@ neo_edit_row_t* neo_edit_page_get_row(neo_edit_page_t* page, int at) {
 
 	// Calculate index
 	size_t idx = 0;
-	if (at < 0) { idx = page->num_rows - 1; }
-	else if (at < (int)page->num_rows) { idx = (size_t)at; }
+	if (position < 0) { idx = page->num_rows - 1; }
+	else if (position < (int)page->num_rows) { idx = (size_t)position; }
 	else {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
 		return NULL;
@@ -383,7 +382,7 @@ neo_edit_row_t* neo_edit_page_get_row(neo_edit_page_t* page, int at) {
 	return &page->rows[idx];
 }
 
-neo_edit_row_t* neo_edit_page_insert_row(neo_edit_page_t* page, int at) {
+neo_edit_row_t* neo_edit_page_insert_row(neo_edit_page_t* page, int position) {
 	// Validate page
 	NEO_CLEAR_ERROR;
 	if (!_neo_edit_page_valid(page)) {
@@ -397,8 +396,8 @@ neo_edit_row_t* neo_edit_page_insert_row(neo_edit_page_t* page, int at) {
 
 	// Calculate index
 	size_t idx = 0;
-	if (at < 0) { idx = page->num_rows; }
-	else if (at <= (int)page->num_rows) { idx = (size_t)at; }
+	if (position < 0) { idx = page->num_rows; }
+	else if (position <= (int)page->num_rows) { idx = (size_t)position; }
 	else {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
 		return NULL;
@@ -418,7 +417,7 @@ neo_edit_row_t* neo_edit_page_insert_row(neo_edit_page_t* page, int at) {
 	return &page->rows[idx];
 }
 
-void neo_edit_page_remove_row(neo_edit_page_t* page, int at) {
+void neo_edit_page_remove_row(neo_edit_page_t* page, int position) {
 	// Validate page
 	NEO_CLEAR_ERROR;
 	if (!_neo_edit_page_valid(page)) {
@@ -428,8 +427,8 @@ void neo_edit_page_remove_row(neo_edit_page_t* page, int at) {
 
 	// Calculate index
 	size_t idx = 0;
-	if (at < 0) { idx = page->num_rows - 1; }
-	else if (at < (int)page->num_rows) { idx = (size_t)at; }
+	if (position < 0) { idx = page->num_rows - 1; }
+	else if (position < (int)page->num_rows) { idx = (size_t)position; }
 	else {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
 		return;
@@ -613,29 +612,30 @@ bool neo_edit_ctx_init(neo_edit_ctx_t* context) {
 	context->state = NSTATE_OPEN;
 
 	// Add menu bar entries
-	neo_menu_group_t* menu_group_file = neo_menu_bar_insert_group(&context->menu_bar, -1, "File", 'f');
-	neo_menu_group_insert_entry(menu_group_file, -1, "New File", 'n', NULL);
-	neo_menu_group_insert_entry(menu_group_file, -1, "Open File", 'o', NULL);
+	neo_menu_group_t* menu_group_file = neo_menu_bar_insert_group(&context->menu_bar, -1, "File", 0);
+	neo_menu_group_insert_entry(menu_group_file, -1, "New File", 'n', neo_cb_new_file);
+	neo_menu_group_insert_entry(menu_group_file, -1, "Open File", 'o', neo_cb_open_file);
 	neo_menu_group_insert_seperator(menu_group_file, -1);
-	neo_menu_group_insert_entry(menu_group_file, -1, "Save File", 's', NULL);
-	neo_menu_group_insert_entry(menu_group_file, -1, "Save File As", 'b', NULL);
-	neo_menu_group_insert_entry(menu_group_file, -1, "Save All Files", 'd', NULL);
+	neo_menu_group_insert_entry(menu_group_file, -1, "Save File", 's', neo_cb_save_file);
+	neo_menu_group_insert_entry(menu_group_file, -1, "Save File As", 'b', neo_cb_save_file_as);
+	neo_menu_group_insert_entry(menu_group_file, -1, "Save All Files", 'e', neo_cb_save_all_file);
 	neo_menu_group_insert_seperator(menu_group_file, -1);
-	neo_menu_group_insert_entry(menu_group_file, -1, "Next Tab", 't', NULL);
-	neo_menu_group_insert_entry(menu_group_file, -1, "Prev Tab", 'r', NULL);
-	neo_menu_group_insert_entry(menu_group_file, -1, "Close Tab", 'w', NULL);
-	neo_menu_group_insert_entry(menu_group_file, -1, "Quit", 'q', NULL);
-	neo_menu_group_t* menu_group_edit = neo_menu_bar_insert_group(&context->menu_bar, -1, "Edit", 'e');
-	neo_menu_group_insert_entry(menu_group_edit, -1, "Cut", 'x', NULL);
-	neo_menu_group_insert_entry(menu_group_edit, -1, "Copy", 'c', NULL);
-	neo_menu_group_insert_entry(menu_group_edit, -1, "Paste", 'v', NULL);
+	neo_menu_group_insert_entry(menu_group_file, -1, "Next Tab", 't', neo_cb_next_page);
+	neo_menu_group_insert_entry(menu_group_file, -1, "Prev Tab", 'r', neo_cb_prev_page);
+	neo_menu_group_insert_entry(menu_group_file, -1, "Close Tab", 'w', neo_cb_close_page);
+	neo_menu_group_insert_entry(menu_group_file, -1, "Quit", 'q', neo_cb_quit);
+	neo_menu_group_t* menu_group_edit = neo_menu_bar_insert_group(&context->menu_bar, -1, "Edit", 0);
+	neo_menu_group_insert_entry(menu_group_edit, -1, "Cut", 'x', neo_cb_cut);
+	neo_menu_group_insert_entry(menu_group_edit, -1, "Copy", 'c', neo_cb_copy);
+	neo_menu_group_insert_entry(menu_group_edit, -1, "Paste", 'v', neo_cb_paste);
+	neo_menu_group_insert_entry(menu_group_edit, -1, "Duplicate Line", 'd', neo_cb_duplicate);
 	neo_menu_group_insert_seperator(menu_group_edit, -1);
-	neo_menu_group_insert_entry(menu_group_edit, -1, "Select All", 'a', NULL);
+	neo_menu_group_insert_entry(menu_group_edit, -1, "Select All", 'a', neo_cb_select_all);
 	neo_menu_group_insert_seperator(menu_group_edit, -1);
-	neo_menu_group_insert_entry(menu_group_edit, -1, "Undo", 'z', NULL);
-	neo_menu_group_insert_entry(menu_group_edit, -1, "Redo", 'y', NULL);
-	neo_menu_group_t* menu_group_help = neo_menu_bar_insert_group(&context->menu_bar, -1, "Help", 'h');
-	neo_menu_group_insert_entry(menu_group_help, -1, "About", 0, NULL);
+	neo_menu_group_insert_entry(menu_group_edit, -1, "Undo", 'z', neo_cb_undo);
+	neo_menu_group_insert_entry(menu_group_edit, -1, "Redo", 'y', neo_cb_redo);
+	neo_menu_group_t* menu_group_help = neo_menu_bar_insert_group(&context->menu_bar, -1, "Help", 0);
+	neo_menu_group_insert_entry(menu_group_help, -1, "About", 0, neo_cb_about);
 	return true;
 }
 
@@ -701,25 +701,74 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 	}
 
 	// Draw file tabs
+	wmove(context->nc_window, 2, 0);
+	whline(context->nc_window, ACS_HLINE, context->window_cols);
 	wmove(context->nc_window, 0, 0);
+	whline(context->nc_window, ' ', context->window_cols);
+	wmove(context->nc_window, 1, 0);
+	whline(context->nc_window, ' ', context->window_cols);
 	for(size_t i = 0; i < context->num_pages; ++i) {
 		neo_edit_page_t* page = &context->pages[i];
-		if (i == context->curr_page) { attron(A_BOLD); }
-		waddch(context->nc_window, (i == context->curr_page) ? '/' : ' ');
-		if (string_empty(&page->filename)) {
-			wprintw(context->nc_window, " <New File> ");
+
+		// Draw tab border (open)
+		if (i == context->curr_page) {
+			waddch(context->nc_window, ACS_VLINE);
+			wmove_cursor_down(context->nc_window, 1);
+			wmove_cursor_left(context->nc_window, 1);
+			waddch(context->nc_window, ACS_BTEE);
+			wmove_cursor_up(context->nc_window, 1);
 		}
 		else {
-			wprintw(context->nc_window, " %s ", page->filename.data);
+			waddch(context->nc_window, ' ');
 		}
+
+		// Set attributes
+		if (i == context->curr_page) { wattron(context->nc_window, A_BOLD); }
+
+		// Draw flags
+		size_t filename_len = 0;
 		if (PAGE_FLAG_ISSET(page, NPAGE_FLAG_DIRTY)) {
+			filename_len++;
 			waddch(context->nc_window, '*');
 		}
-		waddch(context->nc_window, (i == context->curr_page) ? '\\' : ' ');
-		if (i == context->curr_page) { attroff(A_BOLD); }
+
+		// Draw filename
+		string_t filename;
+		if (!string_init(&filename)) { return false; }
+		if (string_empty(&page->filename)) {
+			if (!string_set(&filename, 0, "<New File>", -1)) { return false; }
+		}
+		else {
+			if (!string_duplicate(&page->filename, &filename)) { return false; }
+		}
+		wprintw(context->nc_window, "%s", filename.data);
+		filename_len += filename.length;
+		string_clear(&filename);
+
+		// Clear attributes
+		if (i == context->curr_page) { wattroff(context->nc_window, A_BOLD); }
+
+		// Draw tab border (close)
+		if (i == context->curr_page) {
+			waddch(context->nc_window, ACS_VLINE);
+			wmove_cursor_down(context->nc_window, 1);
+			wmove_cursor_left(context->nc_window, 1);
+			waddch(context->nc_window, ACS_BTEE);
+			wmove_cursor_up(context->nc_window, 2);
+			wmove_cursor_left(context->nc_window, filename_len + 2);
+			waddch(context->nc_window, ACS_ULCORNER);
+			whline(context->nc_window, ACS_HLINE, filename_len);
+			wmove_cursor_right(context->nc_window, filename_len);
+			waddch(context->nc_window, ACS_URCORNER);
+			wmove_cursor_down(context->nc_window, 1);
+		}
+		else {
+			waddch(context->nc_window, ' ');
+		}
+
+		// Spacer
+		wprintw(context->nc_window, "  ");
 	}
-	wmove(context->nc_window, 1, 0);
-	whline(context->nc_window, '-', context->window_cols);
 
 	// Draw page contents
 	neo_edit_page_t* curr_page = EDITOR_GET_CURR_PAGE(context);
@@ -727,12 +776,11 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 		if (!neo_edit_page_draw(curr_page)) {
 			return false;
 		}
-		//show_panel(curr_page->nc_panel);
 	}
 
 	// Draw status message
 	wmove(context->nc_window, context->window_rows - NEO_SIZE_FOOTER, 0);
-	whline(context->nc_window, '-', context->window_cols);
+	whline(context->nc_window, ACS_HLINE, context->window_cols);
 	wmove(context->nc_window, context->window_rows - NEO_SIZE_FOOTER + 1, 0);
 	whline(context->nc_window, ' ', context->window_cols);
 	wprintw(context->nc_window, "%s", context->status_message.data);
@@ -748,10 +796,6 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 		return false;
 	}
 
-	// Enforce the draw order of panels
-	//bottom_panel(context->nc_panel);
-	//top_panel(context->menu_bar.nc_panel);
-
 	// Set final cursor position
 	if (curr_page) {
 		wmove(curr_page->nc_window, (int)curr_page->rcursor_y, (int)curr_page->rcursor_x);
@@ -762,7 +806,7 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 	return true;
 }
 
-size_t neo_edit_ctx_open_file(neo_edit_ctx_t *context, char *filename) {
+size_t neo_edit_ctx_open_page(neo_edit_ctx_t *context, char *filename) {
 	// Validate context
 	NEO_CLEAR_ERROR;
 	if (!_neo_edit_ctx_valid(context)) {
@@ -795,12 +839,11 @@ size_t neo_edit_ctx_open_file(neo_edit_ctx_t *context, char *filename) {
 		return SIZE_MAX;
 	}
 	neo_edit_page_set_filename(&context->pages[idx], filename_str);
-	context->curr_page = idx;
 	context->num_pages++;
 	return idx;
 }
 
-size_t neo_edit_ctx_new_file(neo_edit_ctx_t *context) {
+size_t neo_edit_ctx_new_page(neo_edit_ctx_t *context) {
 	// Validate context
 	NEO_CLEAR_ERROR;
 	if (!_neo_edit_ctx_valid(context)) {
@@ -823,12 +866,11 @@ size_t neo_edit_ctx_new_file(neo_edit_ctx_t *context) {
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize new page");
 		return SIZE_MAX;
 	}
-	context->curr_page = idx;
 	context->num_pages++;
 	return idx;
 }
 
-bool neo_edit_ctx_handle_input(neo_edit_ctx_t *context, int key) {
+bool neo_edit_ctx_close_page(neo_edit_ctx_t* context, int position) {
 	// Validate context
 	NEO_CLEAR_ERROR;
 	if (!_neo_edit_ctx_valid(context)) {
@@ -836,9 +878,93 @@ bool neo_edit_ctx_handle_input(neo_edit_ctx_t *context, int key) {
 		return false; 
 	}
 
-	// Parse input
+	// Calculate index
+	size_t idx = 0;
+	if (position < 0) { idx = context->num_pages - 1; }
+	else if (position < (int)context->num_pages) { idx = (size_t)position; }
+	else {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
+		return false;
+	}
+	neo_edit_page_t* page = &context->pages[idx];
+
+	// Handle panel shuffling
+	if (idx == context->curr_page) { hide_panel(page->nc_panel); }
+
+	// Remove page
+	neo_edit_page_clear(page);
+	size_t n = sizeof(*(context->pages));
+	memmove(&context->pages[idx], &context->pages[idx + 1], n * (context->num_pages - idx - 1));
+	context->num_pages--;
+
+	// Move to new page if current page was removed
+	if (context->num_pages > 0) {
+		if (context->curr_page >= context->num_pages) {
+			neo_edit_ctx_set_page(context, -1);
+		}
+		else if (idx == context->curr_page) {
+			neo_edit_ctx_set_page(context, idx);
+		}
+	}
+	return true;
+}
+
+bool neo_edit_ctx_set_page(neo_edit_ctx_t *context, int position) {
+	// Validate context
+	NEO_CLEAR_ERROR;
+	if (!_neo_edit_ctx_valid(context)) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid context");
+		return false; 
+	}
+
+	// Calculate index
+	size_t idx = 0;
+	if (position < 0) { idx = context->num_pages - 1; }
+	else if (position < (int)context->num_pages) { idx = (size_t)position; }
+	else {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
+		return false;
+	}
+
+	// Hide current page
+	neo_edit_page_t* curr_page = EDITOR_GET_CURR_PAGE(context);
+	if (curr_page) { hide_panel(curr_page->nc_panel); }
+
+	// Switch to new page
+	context->curr_page = idx;
+	curr_page = EDITOR_GET_CURR_PAGE(context);
+	if (curr_page) { show_panel(curr_page->nc_panel); }
+	else { 
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to switch to new page");
+		return false; 
+	}
+	return true;
+}
+
+bool neo_edit_ctx_handle_input(neo_edit_ctx_t* context, int key) {
+	// Validate context
+	NEO_CLEAR_ERROR;
+	if (!_neo_edit_ctx_valid(context)) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid context");
+		return false; 
+	}
 	neo_edit_page_t* curr_page = EDITOR_GET_CURR_PAGE(context);
 	neo_edit_row_t* curr_row = PAGE_GET_CURR_ROW(curr_page);
+
+	// Parse input
+	for(size_t g = 0; g < context->menu_bar.num_groups; ++g) {
+		neo_menu_group_t* group = neo_menu_bar_get_group(&context->menu_bar, g);
+		if (!group) { continue; }
+		for(size_t e = 0; e < group->num_entries; ++e) {
+			neo_menu_entry_t* entry = neo_menu_group_get_entry(group, e);
+			if (!entry) { continue; }
+			if (entry->callback && entry->shortcut != 0 && CTRL_KEY(entry->shortcut) == key) {
+				neo_menu_callback_fptr cb = entry->callback;
+				int res = cb(context);
+				if (res != 0) { return false; }
+			}
+		}
+	}
 	switch(key) {
 		case KEY_LEFT:  if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_LEFT, 1); } break;
 		case KEY_RIGHT: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_RIGHT, 1); } break;
@@ -854,22 +980,6 @@ bool neo_edit_ctx_handle_input(neo_edit_ctx_t *context, int key) {
 		case KEY_SF: /* Shift-down */ break;
 		case KEY_SHOME: /* Shift-home */ break;
 		case KEY_SEND: /* Shift-end */ break;
-		case CTRL_KEY('r'): /* Previous Page */ break;
-		case CTRL_KEY('t'): /* Next Page */ break;
-		case CTRL_KEY('q'): context->state = NSTATE_SHOULD_CLOSE; break;
-		case CTRL_KEY('w'): /* Close Page */ break;
-		case CTRL_KEY('b'): /* Save As */ break;
-		case CTRL_KEY('d'): /* Save All */ break;
-		case CTRL_KEY('s'): /* Save */ break;
-		case CTRL_KEY('n'): /* New Page */ break;
-		case CTRL_KEY('o'): /* Open Page */ break;
-		case CTRL_KEY('c'): /* Copy */ break;
-		case CTRL_KEY('x'): /* Cut */ break;
-		case CTRL_KEY('v'): /* Paste */ break;
-		case CTRL_KEY('a'): /* Select All */ break;
-		case CTRL_KEY('f'): /* Open File Menu */ break;
-		case CTRL_KEY('e'): /* Next Edit Menu */ break;
-		case CTRL_KEY('h'): /* Open Help Menu */ break;
 		case KEY_BACKSPACE: {
 			if (!curr_page) { break; }
 			if (PAGE_FLAG_ISSET(curr_page, NPAGE_FLAG_READONLY)) { 

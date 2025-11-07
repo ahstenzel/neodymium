@@ -92,10 +92,10 @@ bool string_append(string_t* str, const char* insert, size_t len);
  * @param str String pointer
  * @param pos Position to write at
  * @param insert Text to write
- * @param len Number of characters to overwrite
+ * @param len Number of characters to overwrite (if < 0, will calculate with strlen)
  * @return True if successful
  */
-bool string_set(string_t* str, size_t pos, const char* insert, size_t len);
+bool string_set(string_t* str, size_t pos, const char* insert, int len);
 
 /**
  * @brief Add one character to the end of the string.
@@ -203,5 +203,13 @@ bool string_equal(string_t* str1, string_t* str2);
  * @return New capacity (or -1 on error)
  */
 int string_reserve(string_t* str, size_t new_capacity);
+
+/**
+ * @brief Insert newlines into the string to not go over the given max width.
+ * @param str String pointer
+ * @param max_width Max length before a newline
+ * @return Number of lines the string takes up (or -1 on error)
+ */
+int string_wrap(string_t* str, size_t max_width);
 
 #endif // NEO_STRING_H

@@ -47,14 +47,14 @@ int main(int argc, char** argv) {
 			if (vex_token_count(&parser) > 0 && false) {
 				for(int i = 0; i < vex_token_count(&parser); ++i) {
 					vex_arg_token* tok = vex_get_token(&parser, i);
-					if (!neo_edit_ctx_open_file(&edit_ctx, tok->arg->str_arg)) {
+					if (!neo_edit_ctx_open_page(&edit_ctx, tok->arg->str_arg)) {
 						NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to open file");
 						break;
 					}
 				}
 			}
 			else {
-				if (neo_edit_ctx_new_file(&edit_ctx) == SIZE_MAX) {
+				if (neo_edit_ctx_new_page(&edit_ctx) == SIZE_MAX) {
 					NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to create new file");
 					break;
 				}

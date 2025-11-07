@@ -8,8 +8,8 @@ all: neodymium
 debug: CFLAGS += -DDEBUG -g
 debug: all
 
-neodymium: neo_common.c neo_editor.c neo_menu.c neo_settings.c neo_string.c main.c
-	$(CC) neo_common.c neo_editor.c neo_menu.c neo_settings.c neo_string.c main.c -o neo $(CFLAGS) $(LFLAGS)
+neodymium: neo_common.c neo_editor.c neo_menu.c neo_settings.c neo_string.c neo_actions.c main.c
+	$(CC) neo_common.c neo_editor.c neo_menu.c neo_settings.c neo_string.c neo_actions.c main.c -o neo $(CFLAGS) $(LFLAGS)
 
 clean:
 	-rm -f neo

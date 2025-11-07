@@ -124,7 +124,7 @@ bool string_append(string_t *str, const char *insert, size_t len) {
 	return true;
 }
 
-bool string_set(string_t *str, size_t pos, const char *insert, size_t len) {
+bool string_set(string_t *str, size_t pos, const char* insert, int len) {
 	// Validate string
 	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
@@ -135,7 +135,8 @@ bool string_set(string_t *str, size_t pos, const char *insert, size_t len) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
 		return false;
 	}
-	int nlen = (pos + len) - str->length;
+	if (len < 0) { len = strlen(insert); }
+	int nlen = ((int)pos + len) - (int)str->length;
 	if (nlen < 0) { nlen = 0; }
 	if (!_string_check_resize(str, nlen)) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to resize string");
@@ -280,7 +281,7 @@ bool string_duplicate(string_t *src, string_t* dst) {
 		return false;
 	}
 	if (!_string_check_resize(dst, (dst->length > src->length) ? 0 : (src->length - dst->length))) {
-		NEO_THROW_ERROR(NERROR_BAD_ALLOC);
+		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to resize destination string");
 		return false;
 	}
 
@@ -349,4 +350,49 @@ int string_reserve(string_t *str, size_t new_capacity) {
 	str->data = new_data;
 	str->capacity = new_capacity;
 	return new_capacity;
+}
+
+int string_wrap(string_t* str, size_t max_width) {
+	// Validate string
+	NEO_CLEAR_ERROR;
+	if (!_string_valid(str)) { 
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
+		return -1;
+	}
+
+	// Iterate through string
+	int line_count = 1;
+	size_t last_whitespace = 0;
+	size_t last_newline = 0;
+	for(size_t i = 0; i < str->length; ++i) {
+		// Record special characters
+		char c = str->data[i];
+		if (c == ' ' || c == '\t') { last_whitespace = i - last_newline; }
+		else if (c == '\n') { 
+			last_newline = i; 
+			line_count++;
+		}
+
+		// Insert linebreak
+		if ((i - last_newline) > max_width) {
+			if (last_whitespace > 0) {
+				// Overwrite previous space
+				str->data[last_newline + last_whitespace] = '\n';
+				last_newline += last_whitespace;
+				last_whitespace = 0;
+				line_count++;
+			}
+			else {
+				// Insert newline into word
+				if (!string_insert(str, i, "\n", 1)) {
+					NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to insert linebreak into string");
+					return -1;
+				}
+				last_newline = i;
+				last_whitespace = 0;
+				line_count++;
+			}
+		}
+	}
+	return line_count;
 }

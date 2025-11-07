@@ -9,13 +9,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include "neo_string.h"
 #include "neo_common.h"
-
-/**
- * @brief Callback function for a menu entry.
- */
-typedef void (*neo_menu_callback_fptr)(void*, int);
+#include "neo_string.h"
 
 /**
  * @brief Default number of menu entries for a newly initialized menu group.
@@ -33,7 +28,7 @@ typedef void (*neo_menu_callback_fptr)(void*, int);
 struct neo_menu_entry_t {
 	string_t name;
 	char shortcut;
-	neo_menu_callback_fptr callback;
+	void* callback;
 	bool seperator;
 };
 typedef struct neo_menu_entry_t neo_menu_entry_t;
@@ -95,7 +90,7 @@ void neo_menu_group_clear(neo_menu_group_t* group);
  * @param entry_callback Callback function for the entry
  * @return Menu entry pointer (or NULL on error)
  */
-neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int position, const char* entry_name, char entry_shortcut, neo_menu_callback_fptr entry_callback);
+neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int position, const char* entry_name, char entry_shortcut, void* entry_callback);
 
 /**
  * @brief Insert a seperator into the menu group

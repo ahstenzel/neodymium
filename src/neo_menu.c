@@ -117,7 +117,7 @@ void neo_menu_group_clear(neo_menu_group_t* group) {
 	group->selected = -1;
 }
 
-neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int position, const char *entry_name, char entry_shortcut, neo_menu_callback_fptr entry_callback) {
+neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int position, const char *entry_name, char entry_shortcut, void* entry_callback) {
 	// Validate group
 	NEO_CLEAR_ERROR;
 	size_t idx = 0;
@@ -326,13 +326,19 @@ bool neo_menu_bar_draw(neo_menu_bar_t *bar) {
 	}
 
 	// Draw contents
+	wmove(bar->nc_window, 1, 0);
+	whline(bar->nc_window, ACS_HLINE, bar->window_cols);
 	wmove(bar->nc_window, 0, 0);
 	for(size_t i = 0; i < bar->num_groups; ++i) {
 		neo_menu_group_t* group = &bar->groups[i];
-		wprintw(bar->nc_window, " %s |", group->name.data);
+		wprintw(bar->nc_window, " %s ", group->name.data);
+		waddch(bar->nc_window, ACS_VLINE);
+		wmove_cursor_down(bar->nc_window, 1);
+		wmove_cursor_left(bar->nc_window, 1);
+		waddch(bar->nc_window, ACS_BTEE);
+		wmove_cursor_up(bar->nc_window, 1);
 	}
-	wmove(bar->nc_window, 1, 0);
-	whline(bar->nc_window, '-', bar->window_cols);
+	
 	return true;
 }
 

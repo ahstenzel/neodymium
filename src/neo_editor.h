@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "neo_common.h"
 #include "neo_string.h"
 #include "neo_settings.h"
 #include "neo_menu.h"
@@ -251,25 +252,25 @@ bool neo_edit_page_draw(neo_edit_page_t* page);
 /**
  * @brief Get the row at the given position.
  * @param page Page pointer
- * @param at Row index (or -1 for the last row)
+ * @param position Row index (or -1 for the last row)
  * @return Row pointer (or NULL on error)
  */
-neo_edit_row_t* neo_edit_page_get_row(neo_edit_page_t* page, int at);
+neo_edit_row_t* neo_edit_page_get_row(neo_edit_page_t* page, int position);
 
 /**
  * @brief Insert a new row at the given position.
  * @param page Page pointer
- * @param at Row index (or -1 for the end)
+ * @param position Row index (or -1 for the end)
  * @return New row pointer (or NULL on error)
  */
-neo_edit_row_t* neo_edit_page_insert_row(neo_edit_page_t* page, int at);
+neo_edit_row_t* neo_edit_page_insert_row(neo_edit_page_t* page, int position);
 
 /**
  * @brief Remove the row at the given position.
  * @param page Page pointer
- * @param at Row index (or -1 for the last row)
+ * @param position Row index (or -1 for the last row)
  */
-void neo_edit_page_remove_row(neo_edit_page_t* page, int at);
+void neo_edit_page_remove_row(neo_edit_page_t* page, int position);
 
 /**
  * @brief Set the Y position of the cursor.
@@ -347,14 +348,30 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t* context);
  * @param filename Full filename
  * @return Index of new page (or SIZE_MAX on error)
  */
-size_t neo_edit_ctx_open_file(neo_edit_ctx_t* context, char* filename);
+size_t neo_edit_ctx_open_page(neo_edit_ctx_t* context, char* filename);
 
 /**
  * @brief Open a new blank page.
  * @param context Context pointer
  * @return Index of new page (or SIZE_MAX on error)
  */
-size_t neo_edit_ctx_new_file(neo_edit_ctx_t* context);
+size_t neo_edit_ctx_new_page(neo_edit_ctx_t* context);
+
+/**
+ * @brief Close a page.
+ * @param context Context pointer
+ * @param position Index of page (or -1 for the last page)
+ * @return True if successful
+ */
+bool neo_edit_ctx_close_page(neo_edit_ctx_t* context, int position);
+
+/**
+ * @brief Set which page is currently visible.
+ * @param context Context pointer
+ * @param position Index of page (or -1 for the last page)
+ * @return True if successful
+ */
+bool neo_edit_ctx_set_page(neo_edit_ctx_t* context, int position);
 
 /**
  * @brief Respond to keyboard input.

@@ -10,5 +10,6 @@
 #include "neo_string.h"
 #include "neo_menu.h"
 #include "neo_editor.h"
+#include "neo_actions.h"
 
 #endif // NEO_H

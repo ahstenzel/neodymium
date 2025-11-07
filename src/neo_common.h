@@ -49,7 +49,7 @@
 #endif
 
 #define NEO_SIZE_MENU_BAR 2
-#define NEO_SIZE_FILE_BAR 2
+#define NEO_SIZE_FILE_BAR 3
 #define NEO_SIZE_HEADER (NEO_SIZE_MENU_BAR+NEO_SIZE_FILE_BAR)
 #define NEO_SIZE_FOOTER 2
 #define NEO_SCROLL_MARGIN 1
@@ -60,9 +60,11 @@
 #if !__STRICT_ANSI__ && __GNUC__ >= 3
 	#define MIN(a,b) ({ __typeof__ (a) _a=(a); __typeof__ (b) _b=(b); _a<_b ? _a : _b; })
 	#define MAX(a,b) ({ __typeof__ (a) _a=(a); __typeof__ (b) _b=(b); _a>_b ? _a : _b; })
+	#define CLAMP(a, l, u) ({ __typeof__ (a) _a=(a); __typeof__ (l) _l=(l); __typeof__ (u) _u=(u); _a>_u ? _u : (_a<_l ? _l : _a); })
 #else
 	#define MIN(a, b) ((a) < (b)) ? (a) : (b)
 	#define MAX(a, b) ((a) > (b)) ? (a) : (b)
+	#define CLAMP(a, l, u) ((a) > (u)) ? (u) : (((a) < (l)) ? (l) : (a))
 #endif
 
 #define UNUSED(x) ((void)(x))
@@ -70,6 +72,26 @@
 #define COUNT_OF(a) (sizeof(a)/sizeof(a[0]))
 
 #define CTRL_KEY(x) ((x) & 0x1f)
+
+/**
+ * @brief Shortcut to move the ncurses window cursor one row down.
+ */
+#define wmove_cursor_down(win, n) ({ int _x, _y; getyx((win), _y, _x); wmove((win), _y + (n), _x); })
+
+/**
+ * @brief Shortcut to move the ncurses window cursor one row up.
+ */
+#define wmove_cursor_up(win, n) ({ int _x, _y; getyx((win), _y, _x); wmove((win), _y - (n), _x); })
+
+/**
+ * @brief Shortcut to move the ncurses window cursor one column left.
+ */
+#define wmove_cursor_left(win, n) ({ int _x, _y; getyx((win), _y, _x); wmove((win), _y, _x - (n)); })
+
+/**
+ * @brief Shortcut to move the ncurses window cursor one column right.
+ */
+#define wmove_cursor_right(win, n) ({ int _x, _y; getyx((win), _y, _x); wmove((win), _y, _x + (n)); })
 
 
 // ============================================== error logging
