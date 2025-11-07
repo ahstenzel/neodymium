@@ -147,7 +147,7 @@ neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int posit
 
 	// Shift end of group forward
 	size_t n = sizeof(*(group->entries));
-	memmove(group->entries + (n * (idx + 1)), group->entries + (n * idx), n * (group->num_entries - idx));
+	memmove(&group->entries[idx + 1], &group->entries[idx], n * (group->num_entries - idx));
 
 	// Create entry
 	neo_menu_entry_t* entry = &group->entries[idx];
@@ -178,7 +178,7 @@ void neo_menu_group_insert_seperator(neo_menu_group_t* group, int position) {
 
 	// Shift end of group forward
 	size_t n = sizeof(*(group->entries));
-	memmove(group->entries + (n * (idx + 1)), group->entries + (n * idx), n * (group->num_entries - idx));
+	memmove(&group->entries[idx + 1], &group->entries[idx], n * (group->num_entries - idx));
 
 	// Create blank entry
 	neo_menu_entry_t* entry = &group->entries[idx];
@@ -241,7 +241,7 @@ void neo_menu_group_remove_entry(neo_menu_group_t *group, int position) {
 
 	// Shift end of group backward
 	size_t n = sizeof(*(group->entries));
-	memmove(group->entries + (n * idx), group->entries + (n * (idx + 1)), n * (group->num_entries - idx - 1));
+	memmove(&group->entries[idx], &group->entries[idx + 1], n * (group->num_entries - idx - 1));
 	group->num_entries--;
 }
 
@@ -367,7 +367,7 @@ neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, c
 
 	// Shift end of group forward
 	size_t n = sizeof(*(bar->groups));
-	memmove(bar->groups + (n * (idx + 1)), bar->groups + (n * idx), n * (bar->num_groups - idx));
+	memmove(&bar->groups[idx + 1], &bar->groups[idx], n * (bar->num_groups - idx));
 	memcpy(&bar->groups[idx], &new_group, n);
 	bar->num_groups++;
 	return &bar->groups[idx];
@@ -426,6 +426,6 @@ void neo_menu_bar_remove_group(neo_menu_bar_t* bar, int position) {
 
 	// Shift end of group backward
 	size_t n = sizeof(*(bar->groups));
-	memmove(bar->groups + (n * idx), bar->groups + (n * (idx + 1)), n * (bar->num_groups - idx - 1));
+	memmove(&bar->groups[idx], &bar->groups[idx + 1], n * (bar->num_groups - idx - 1));
 	bar->num_groups--;
 }

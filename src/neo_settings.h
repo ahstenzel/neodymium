@@ -37,6 +37,19 @@ typedef struct {
 } neo_settings_t;
 
 /**
+ * @brief Key-value pair for settings.
+ */
+typedef struct {
+	const char* key;
+	neo_settings_val_t val;
+} neo_settings_entry_t;
+
+/**
+ * @brief Default settings values.
+ */
+extern const neo_settings_entry_t _neo_settings_defaults[];
+
+/**
  * @brief Initialize a settings structure.
  * @details
  * This takes an existing settings structure that has been default constructed and allocates memory
@@ -61,8 +74,9 @@ void neo_settings_clear(neo_settings_t* settings);
  * @param settings Settings pointer
  * @param key Setting name
  * @param val Setting value
+ * @return True if successful
  */
-void neo_settings_insert(neo_settings_t* settings, const char* key, neo_settings_val_t val);
+bool neo_settings_insert(neo_settings_t* settings, const char* key, neo_settings_val_t val);
 
 /**
  * @brief Remove a settings value from the structure.
@@ -84,5 +98,12 @@ void neo_settings_remove(neo_settings_t* settings, const char* key);
  * @return True if exists
  */
 bool neo_settings_get(neo_settings_t* settings, const char* key, neo_settings_val_t* val);
+
+/**
+ * @brief Clear all settings values and reload defaults.
+ * @param settings Settings pointer
+ * @return True if successful
+ */
+bool neo_settings_load_defaults(neo_settings_t* settings);
 
 #endif // NEO_SETTINGS_H

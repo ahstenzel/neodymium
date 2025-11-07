@@ -67,6 +67,8 @@
 
 #define UNUSED(x) ((void)(x))
 
+#define COUNT_OF(a) (sizeof(a)/sizeof(a[0]))
+
 #define CTRL_KEY(x) ((x) & 0x1f)
 
 

@@ -2,6 +2,10 @@
 #include "neo_common.h"
 #include <komihash/komihash.h>
 
+const neo_settings_entry_t _neo_settings_defaults[] = {
+	{"editor.tab_length", {.val_int = 4}}
+};
+
 static bool _neo_settings_valid(neo_settings_t* settings) {
 	return (settings && settings->keys && settings->vals && settings->capacity >= settings->length);
 }
@@ -131,19 +135,19 @@ void neo_settings_clear(neo_settings_t* settings) {
 	settings->capacity = 0;
 }
 
-void neo_settings_insert(neo_settings_t* settings, const char* key, neo_settings_val_t val) {
+bool neo_settings_insert(neo_settings_t* settings, const char* key, neo_settings_val_t val) {
 	// Validate settings
 	if (!_neo_settings_valid(settings)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid settings");
-		return; 
+		return false; 
 	}
 	if (!key || strlen(key) == 0) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid settings key");
-		return;
+		return false;
 	}
 	if (!_neo_settings_check_resize(settings)) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to resize settings map");
-		return;
+		return false;
 	}
 
 	// Insert element
@@ -152,9 +156,10 @@ void neo_settings_insert(neo_settings_t* settings, const char* key, neo_settings
 		key, strlen(key), val
 	)) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to insert key");
-		return;
+		return false;
 	}
 	settings->length++;
+	return true;
 }
 
 void neo_settings_remove(neo_settings_t* settings, const char* key) {
@@ -207,5 +212,25 @@ bool neo_settings_get(neo_settings_t* settings, const char* key, neo_settings_va
 
 	// Get element
 	if (val) { *val = settings->vals[idx]; }
+	return true;
+}
+
+bool neo_settings_load_defaults(neo_settings_t* settings) {
+	// Validate settings
+	if (!_neo_settings_valid(settings)) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid settings");
+		return false; 
+	}
+
+	// Load settings
+	neo_settings_clear(settings);
+	if (!neo_settings_init(settings)) {
+		return false;
+	}
+	for(size_t i = 0; i < COUNT_OF(_neo_settings_defaults); ++i) {
+		if (!neo_settings_insert(settings, _neo_settings_defaults[i].key, _neo_settings_defaults[i].val)) {
+			return false;
+		}
+	}
 	return true;
 }

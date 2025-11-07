@@ -18,7 +18,7 @@ static bool _neo_edit_ctx_valid(neo_edit_ctx_t* context) {
 	);
 }
 
-static bool _neo_edit_page_check_resize(neo_edit_page_t* page, size_t len) {
+static bool _neo_edit_page_check_row_resize(neo_edit_page_t* page, size_t len) {
 	assert(page && page->rows);
 	if (len == 0) { return true; }
 	while (page->max_rows == 0 || page->num_rows + len >= page->max_rows) {
@@ -61,7 +61,7 @@ bool neo_edit_row_init(neo_edit_row_t* row, neo_edit_page_t* page) {
 	if (!string_init(&row->content) || !string_init(&row->rcontent)) {
 		return false;
 	}
-	row->dirty = false;
+	row->dirty = true;
 	row->page = page;
 	return true;
 }
@@ -122,6 +122,67 @@ bool neo_edit_row_update(neo_edit_row_t* row) {
 	}
 	row->dirty = false;
 	return ret;
+}
+
+bool neo_edit_row_insert_text(neo_edit_row_t* row, int position, const char* insert, size_t len) {
+	// Validate row
+	NEO_CLEAR_ERROR;
+	if (!_neo_edit_row_valid(row)) { 
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid row");
+		return false; 
+	}
+
+	// Insert text
+	size_t idx = 0;
+	if (position == -1) { idx = row->content.length; }
+	else if (position >= 0 && position <= (int)row->content.length) { idx = (size_t)position; }
+	else {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
+		return false;
+	}
+	if (!string_insert(&row->content, idx, insert, len)) {
+		return false;
+	}
+	PAGE_FLAG_SET(row->page, NPAGE_FLAG_DIRTY);
+	row->dirty = true;
+	return true;
+}
+
+bool neo_edit_row_set_text(neo_edit_row_t* row, const char* insert, size_t len) {
+	// Validate row
+	NEO_CLEAR_ERROR;
+	if (!_neo_edit_row_valid(row)) { 
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid row");
+		return false; 
+	}
+
+	// Erase existing text
+	if (!string_erase_all(&row->content)) {
+		return false;
+	}
+	if (!string_set(&row->content, 0, insert, len)) {
+		return false;
+	}
+	PAGE_FLAG_SET(row->page, NPAGE_FLAG_DIRTY);
+	row->dirty = true;
+	return true;
+}
+
+bool neo_edit_row_erase_text(neo_edit_row_t* row, size_t position, size_t len) {
+	// Validate row
+	NEO_CLEAR_ERROR;
+	if (!_neo_edit_row_valid(row)) { 
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid row");
+		return false; 
+	}
+
+	// Remove text
+	if (!string_erase(&row->content, position, len)) {
+		return false;
+	}
+	PAGE_FLAG_SET(row->page, NPAGE_FLAG_DIRTY);
+	row->dirty = true;
+	return true;
 }
 
 size_t neo_edit_row_cursor_update(neo_edit_row_t* row, size_t cx) {
@@ -258,10 +319,23 @@ bool neo_edit_page_update(neo_edit_page_t* page) {
 
 	// Iterate through rows
 	for(size_t i = 0; i < page->num_rows; ++i) {
-		if (!neo_edit_row_update(&page->rows[i])) { 
+		neo_edit_row_t* row = &page->rows[i];
+		row->page = page;
+		if (!neo_edit_row_update(row)) { 
 			return false; 
 		}
 	}
+
+	// Calculate cursor position
+	if (page->cursor_y < page->num_rows) {
+		page->rcursor_x = neo_edit_row_cursor_update(PAGE_GET_CURR_ROW(page), page->cursor_x);
+		page->rcursor_y = page->cursor_y;
+	}
+	else {
+		page->rcursor_x = 0;
+		page->rcursor_y = page->cursor_y;
+	}
+
 	return true;
 }
 
@@ -276,7 +350,13 @@ bool neo_edit_page_draw(neo_edit_page_t* page) {
 	// Draw page contents
 	for(size_t i = 0; i < page->window_rows; ++i) {
 		wmove(page->nc_window, i, 0);
-		waddch(page->nc_window, '~');
+		whline(page->nc_window, ' ', page->window_cols);
+		size_t row_idx = page->row_off + i;
+		if (row_idx >= page->num_rows) { waddch(page->nc_window, '~'); }
+		else {
+			neo_edit_row_t* row = &page->rows[row_idx];
+			wprintw(page->nc_window, "%s", row->rcontent.data);
+		}
 	}
 	return true;
 }
@@ -310,7 +390,7 @@ neo_edit_row_t* neo_edit_page_insert_row(neo_edit_page_t* page, int at) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid page");
 		return NULL; 
 	}
-	if (!_neo_edit_page_check_resize(page, 1)) {
+	if (!_neo_edit_page_check_row_resize(page, 1)) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to resize row buffer");
 		return NULL;
 	}
@@ -325,14 +405,14 @@ neo_edit_row_t* neo_edit_page_insert_row(neo_edit_page_t* page, int at) {
 	}
 
 	// Initialize row
-	size_t n = sizeof(*(page->rows));
-	neo_edit_row_t new_row = {0};
+	neo_edit_row_t new_row = { 0 };
 	if (!neo_edit_row_init(&new_row, page)) {
 		return NULL;
 	}
 
 	// Shift end of buffer forward
-	memmove(page->rows + (n * (idx + 1)), page->rows + (n * idx), n * (page->num_rows - idx));
+	size_t n = sizeof(*(page->rows));
+	memmove(&page->rows[idx + 1], &page->rows[idx], n * (page->num_rows - idx));
 	memcpy(&page->rows[idx], &new_row, n);
 	page->num_rows++;
 	return &page->rows[idx];
@@ -348,16 +428,19 @@ void neo_edit_page_remove_row(neo_edit_page_t* page, int at) {
 
 	// Calculate index
 	size_t idx = 0;
-	if (at < 0) { idx = page->num_rows; }
-	else if (at <= (int)page->num_rows) { idx = (size_t)at; }
+	if (at < 0) { idx = page->num_rows - 1; }
+	else if (at < (int)page->num_rows) { idx = (size_t)at; }
 	else {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
 		return;
 	}
 
+	// Clear row
+	neo_edit_row_clear(&page->rows[idx]);
+
 	// Shift end of group backward
 	size_t n = sizeof(*(page->rows));
-	memmove(page->rows + (n * idx), page->rows + (n * (idx + 1)), n * (page->num_rows - idx - 1));
+	memmove(&page->rows[idx], &page->rows[idx + 1], n * (page->num_rows - idx - 1));
 	page->num_rows--;
 }
 
@@ -421,7 +504,7 @@ void neo_edit_page_move_cursor(neo_edit_page_t *page, neo_dir_t dir, size_t num)
 			case NDIR_UP: 
 				if (page->cursor_y > 0) {
 					next_row = &page->rows[--(page->cursor_y)];
-					if (page->cursor_x == curr_row->content.length ||
+					if ((curr_row->content.length > 0 && page->cursor_x == curr_row->content.length) ||
 						page->cursor_x >= next_row->content.length) {
 						page->cursor_x = next_row->content.length;
 					}
@@ -430,7 +513,7 @@ void neo_edit_page_move_cursor(neo_edit_page_t *page, neo_dir_t dir, size_t num)
 			case NDIR_DOWN:
 				if (page->cursor_y < page->num_rows) {
 					next_row = &page->rows[++(page->cursor_y)];
-					if (page->cursor_x == curr_row->content.length ||
+					if ((curr_row->content.length > 0 && page->cursor_x == curr_row->content.length) ||
 						page->cursor_x >= next_row->content.length) {
 						page->cursor_x = next_row->content.length;
 					}
@@ -500,7 +583,7 @@ bool neo_edit_ctx_init(neo_edit_ctx_t* context) {
 	memset(context->pages, 0, page_len);
 
 	// Initialize members
-	if (!neo_settings_init(&context->settings)) {
+	if (!neo_settings_init(&context->settings) || !neo_settings_load_defaults(&context->settings)) {
 		return false;
 	}
 	if (!neo_menu_bar_init(&context->menu_bar)) {
@@ -595,7 +678,9 @@ bool neo_edit_ctx_update(neo_edit_ctx_t* context) {
 
 	// Update pages
 	for(size_t i = 0; i < context->num_pages; ++i) {
-		if (!neo_edit_page_update(&context->pages[i])) {
+		neo_edit_page_t* page = &context->pages[i];
+		page->context = context;
+		if (!neo_edit_page_update(page)) {
 			return false;
 		}
 	}
@@ -655,7 +740,7 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 	// Draw cursor position
 	if (curr_page) {
 		wmove(context->nc_window, context->window_rows - NEO_SIZE_FOOTER + 1, context->window_cols - 16);
-		wprintw(context->nc_window, "L:%d C:%d", (int)curr_page->cursor_y, (int)curr_page->cursor_x);
+		wprintw(context->nc_window, "L:%d C:%d", (int)curr_page->rcursor_y, (int)curr_page->rcursor_x);
 	}
 
 	// Draw file bar
@@ -669,8 +754,7 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 
 	// Set final cursor position
 	if (curr_page) {
-		wmove(curr_page->nc_window, (int)curr_page->cursor_y, (int)curr_page->cursor_x);
-		//waddch(curr_page->nc_window, '!');
+		wmove(curr_page->nc_window, (int)curr_page->rcursor_y, (int)curr_page->rcursor_x);
 	}
 	else {
 		wmove(context->nc_window, NEO_SIZE_FILE_BAR, 0);
@@ -753,8 +837,139 @@ bool neo_edit_ctx_handle_input(neo_edit_ctx_t *context, int key) {
 	}
 
 	// Parse input
-	if (key == CTRL_KEY('q')) {
-		context->state = NSTATE_SHOULD_CLOSE;
+	neo_edit_page_t* curr_page = EDITOR_GET_CURR_PAGE(context);
+	neo_edit_row_t* curr_row = PAGE_GET_CURR_ROW(curr_page);
+	switch(key) {
+		case KEY_LEFT:  if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_LEFT, 1); } break;
+		case KEY_RIGHT: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_RIGHT, 1); } break;
+		case KEY_UP:    if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_UP, 1); } break;
+		case KEY_DOWN:  if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_DOWN, 1); } break;
+		case KEY_PPAGE: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_UP, curr_page->window_rows); } break;
+		case KEY_NPAGE: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_DOWN, curr_page->window_rows); } break;
+		case KEY_HOME:  if (curr_page) { neo_edit_page_set_cursor_col(curr_page, 0); } break;
+		case KEY_END:   if (curr_page) { neo_edit_page_set_cursor_col(curr_page, -1); } break;
+		case KEY_SLEFT: /* Shift-left */ break;
+		case KEY_SRIGHT: /* Shift-right */ break;
+		case KEY_SR: /* Shift-up */ break;
+		case KEY_SF: /* Shift-down */ break;
+		case KEY_SHOME: /* Shift-home */ break;
+		case KEY_SEND: /* Shift-end */ break;
+		case CTRL_KEY('r'): /* Previous Page */ break;
+		case CTRL_KEY('t'): /* Next Page */ break;
+		case CTRL_KEY('q'): context->state = NSTATE_SHOULD_CLOSE; break;
+		case CTRL_KEY('w'): /* Close Page */ break;
+		case CTRL_KEY('b'): /* Save As */ break;
+		case CTRL_KEY('d'): /* Save All */ break;
+		case CTRL_KEY('s'): /* Save */ break;
+		case CTRL_KEY('n'): /* New Page */ break;
+		case CTRL_KEY('o'): /* Open Page */ break;
+		case CTRL_KEY('c'): /* Copy */ break;
+		case CTRL_KEY('x'): /* Cut */ break;
+		case CTRL_KEY('v'): /* Paste */ break;
+		case CTRL_KEY('a'): /* Select All */ break;
+		case CTRL_KEY('f'): /* Open File Menu */ break;
+		case CTRL_KEY('e'): /* Next Edit Menu */ break;
+		case CTRL_KEY('h'): /* Open Help Menu */ break;
+		case KEY_BACKSPACE: {
+			if (!curr_page) { break; }
+			if (PAGE_FLAG_ISSET(curr_page, NPAGE_FLAG_READONLY)) { 
+				neo_edit_ctx_status(context, "File is in read-only mode!");
+				break; 
+			}
+			else if (curr_row) {
+				if (curr_page->cursor_x == 0) {
+					if (curr_page->cursor_y > 0 && curr_page->cursor_y < curr_page->num_rows) {
+						// Merge text with previous line
+						neo_edit_row_t* prev_row = &curr_page->rows[curr_page->cursor_y - 1];
+						string_t tmp;
+						string_init(&tmp);
+						string_append(&tmp, curr_row->content.data, curr_row->content.length);
+						neo_edit_page_remove_row(curr_page, curr_page->cursor_y);
+						neo_edit_row_insert_text(prev_row, -1, tmp.data, tmp.length);
+						neo_edit_page_move_cursor(curr_page, NDIR_UP, 1);
+						neo_edit_page_set_cursor_col(curr_page, prev_row->content.length - tmp.length);
+						string_clear(&tmp);
+					}
+				}
+				else {
+					neo_edit_page_move_cursor(curr_page, NDIR_LEFT, 1);
+					neo_edit_row_erase_text(curr_row, curr_page->cursor_x, 1);
+				}
+			}
+		} break;
+		case KEY_DC: {
+			if (!curr_page) { break; }
+			if (PAGE_FLAG_ISSET(curr_page, NPAGE_FLAG_READONLY)) { 
+				neo_edit_ctx_status(context, "File is in read-only mode!");
+				break; 
+			}
+			else if (curr_row) {
+				if (curr_page->cursor_x == curr_row->content.length) {
+					if (curr_page->cursor_y < curr_page->num_rows - 1) {
+						// Bring next line onto current line
+						neo_edit_row_t* next_row = &curr_page->rows[curr_page->cursor_y + 1];
+						string_t tmp;
+						string_init(&tmp);
+						string_append(&tmp, next_row->content.data, next_row->content.length);
+						neo_edit_page_remove_row(curr_page, curr_page->cursor_y + 1);
+						neo_edit_row_insert_text(curr_row, -1, tmp.data, tmp.length);
+						string_clear(&tmp);
+					}
+				}
+				else if (curr_row->content.length > 0) {
+					neo_edit_row_erase_text(curr_row, curr_page->cursor_x, 1);
+				}
+			}
+		} break;
+		case '\n':
+		case '\r':
+		case KEY_ENTER: {
+			if (!curr_page) { break; }
+			if (PAGE_FLAG_ISSET(curr_page, NPAGE_FLAG_READONLY)) { 
+				neo_edit_ctx_status(context, "File is in read-only mode!");
+				break; 
+			}
+			else if (curr_row) {
+				if (curr_page->cursor_x >= curr_row->content.length) {
+					// Create empty new line
+					neo_edit_page_insert_row(curr_page, curr_page->cursor_y + 1);
+					neo_edit_page_move_cursor(curr_page, NDIR_DOWN, 1);
+					neo_edit_page_set_cursor_col(curr_page, 0);
+				}
+				else {
+					// Split text onto a new line
+					string_t tmp;
+					string_init(&tmp);
+					string_append(&tmp, &curr_row->content.data[curr_page->cursor_x], curr_row->content.length - curr_page->cursor_x);
+					neo_edit_row_erase_text(curr_row, curr_page->cursor_x, curr_row->content.length - curr_page->cursor_x);
+					neo_edit_row_t* new_row = neo_edit_page_insert_row(curr_page, curr_page->cursor_y + 1);
+					neo_edit_row_set_text(new_row, tmp.data, tmp.length);
+					neo_edit_page_move_cursor(curr_page, NDIR_DOWN, 1);
+					neo_edit_page_set_cursor_col(curr_page, 0);
+					string_clear(&tmp);
+				}
+			}
+			else {
+				// Create new line in an empty file
+				neo_edit_page_insert_row(curr_page, -1);
+				neo_edit_page_move_cursor(curr_page, NDIR_DOWN, 1);
+			}
+		} break;
+		default: {
+			if (!curr_page) { break; }
+			if (PAGE_FLAG_ISSET(curr_page, NPAGE_FLAG_READONLY)) { 
+				neo_edit_ctx_status(context, "File is in read-only mode!");
+				break; 
+			}
+			if ((!iscntrl(key) && key < 128 && key >= 0) || key == '\t') {
+				if (!curr_row) {
+					curr_row = neo_edit_page_insert_row(curr_page, -1);
+				}
+				char text = (char)(key);
+				neo_edit_row_insert_text(curr_row, curr_page->cursor_x, &text, 1);
+				neo_edit_page_move_cursor(curr_page, NDIR_RIGHT, 1);
+			}
+		} break;
 	}
 	return true;
 }

@@ -63,8 +63,8 @@ bool string_insert(string_t *str, size_t pos, const char *insert, size_t len) {
 	}
 
 	// Shift end of string forward
-	memmove(str->data + pos + len, str->data + pos, str->length - pos);
-	memcpy(str->data + pos, insert, len);
+	memmove(&str->data[pos + len], &str->data[pos], str->length - pos);
+	memcpy(&str->data[pos], insert, len);
 	str->length += len;
 	str->data[str->length] = '\0';
 	return true;
@@ -85,7 +85,7 @@ bool string_erase(string_t *str, size_t pos, size_t len) {
 	if (pos + len > str->length) { len = (str->length - pos); }
 
 	// Move end of string backwards
-	memmove(str->data + pos, str->data + pos + len, str->length - len - 1);
+	memmove(&str->data[pos], &str->data[pos + len], str->length - len);
 	str->length -= len;
 	str->data[str->length] = '\0';
 	return true;
@@ -118,7 +118,7 @@ bool string_append(string_t *str, const char *insert, size_t len) {
 	}
 
 	// Add to end of string
-	memcpy(str->data + str->length, insert, len);
+	memcpy(&str->data[str->length], insert, len);
 	str->length += len;
 	str->data[str->length] = '\0';
 	return true;
@@ -143,7 +143,7 @@ bool string_set(string_t *str, size_t pos, const char *insert, size_t len) {
 	}
 
 	// Overwrite part of string
-	memcpy(str->data + pos, insert, len);
+	memcpy(&str->data[pos], insert, len);
 	str->length += nlen;
 	str->data[str->length] = '\0';
 	return true;
@@ -191,7 +191,7 @@ bool string_push_front(string_t *str, char insert) {
 		return false;
 	}
 
-	memmove(str->data + 1, str->data, str->length);
+	memmove(&str->data[1], &str->data[0], str->length);
 	str->data[str->length++] = '\0';
 	str->data[0] = insert;
 	return true;
@@ -206,7 +206,7 @@ bool string_pop_front(string_t *str) {
 	}
 	if (str->length == 0) { return true; }
 
-	memmove(str->data, str->data + 1, str->length - 1);
+	memmove(&str->data[0], &str->data[1], str->length - 1);
 	str->data[--str->length] = '\0';
 	return true;
 }
@@ -285,7 +285,7 @@ bool string_duplicate(string_t *src, string_t* dst) {
 	}
 
 	// Overwrite destination string contents
-	memcpy(dst->data, src->data, src->length + 1);
+	memcpy(&dst->data[0], &src->data[0], src->length + 1);
 	dst->length = src->length;
 	return true;
 }
@@ -307,7 +307,7 @@ bool string_substr(string_t *src, size_t pos, size_t len, string_t* dst) {
 	}
 
 	// Overwrite destination string contents
-	memcpy(dst->data, src->data + pos, len);
+	memcpy(&dst->data[0], &src->data[pos], len);
 	dst->length = len;
 	dst->data[dst->length] = '\0';
 	return true;

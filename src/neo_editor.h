@@ -115,6 +115,8 @@ struct neo_edit_page_t {
 	neo_page_flag_t flags;
 };
 
+#define PAGE_GET_CURR_ROW(page) ((page) && (page)->cursor_y < (page)->num_rows) ? &(page)->rows[(page)->cursor_y] : NULL
+
 /**
  * @brief Top-level state of the editor.
  */
@@ -167,6 +169,34 @@ void neo_edit_row_clear(neo_edit_row_t* row);
  * @return True if successful
  */
 bool neo_edit_row_update(neo_edit_row_t* row);
+
+/**
+ * @brief Insert text into the row at the given position.
+ * @param row Row pointer
+ * @param position Position to insert at (or -1 for the end)
+ * @param insert Text to insert
+ * @param len Number of characters to insert
+ * @return True if successful
+ */
+bool neo_edit_row_insert_text(neo_edit_row_t* row, int position, const char* insert, size_t len);
+
+/**
+ * @brief Overwrite the text of the row.
+ * @param row Row pointer
+ * @param insert Text to insert
+ * @param len Number of characters to insert
+ * @return True if successful
+ */
+bool neo_edit_row_set_text(neo_edit_row_t* row, const char* insert, size_t len);
+
+/**
+ * @brief Erase text from the row at the given position.
+ * @param row Row pointer
+ * @param position Position to erase at
+ * @param len Number of characters to erase
+ * @return True if successful
+ */
+bool neo_edit_row_erase_text(neo_edit_row_t* row, size_t position, size_t len);
 
 /**
  * @brief Calculate the cursors correct position in the rows rendered text.
