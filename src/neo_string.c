@@ -105,13 +105,14 @@ bool string_erase_all(string_t *str) {
 	return true;
 }
 
-bool string_append(string_t *str, const char *insert, size_t len) {
+bool string_append(string_t *str, const char *insert, int len) {
 	// Validate string
 	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
 	}
+	if (len < 0) { len = strlen(insert); }
 	if (!_string_check_resize(str, len)) {
 		NEO_THROW_ERROR(NERROR_BAD_ALLOC);
 		return false;
@@ -150,65 +151,75 @@ bool string_set(string_t *str, size_t pos, const char* insert, int len) {
 	return true;
 }
 
-bool string_push_back(string_t *str, char insert) {
+bool string_push_back(string_t *str, char insert, size_t count) {
 	// Validate string
 	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
 	}
-	if (!_string_check_resize(str, 1)) {
+	if (count == 0) { return true; }
+	if (!_string_check_resize(str, count)) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to resize string");
 		return false;
 	}
 
-	str->data[str->length] = insert;
-	str->data[++str->length] = '\0';
+	for(size_t i = 0; i < count; ++i) {
+		str->data[str->length] = insert;
+		str->data[++str->length] = '\0';
+	}
 	return true;
 }
 
-bool string_pop_back(string_t *str) {
+bool string_pop_back(string_t *str, size_t count) {
 	// Validate string
 	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false;
 	}
-	if (str->length == 0) { return true; }
+	if (str->length == 0 || count == 0) { return true; }
 
-	str->data[--str->length] = '\0';
+	for(size_t i = 0; i < count; ++i) {
+		str->data[--str->length] = '\0';
+	}
 	return true;
 }
 
-bool string_push_front(string_t *str, char insert) {
+bool string_push_front(string_t *str, char insert, size_t count) {
 	// Validate string
 	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
 	}
-	if (!_string_check_resize(str, 1)) {
+	if (count == 0) { return true; }
+	if (!_string_check_resize(str, count)) {
 		NEO_THROW_ERROR(NERROR_BAD_ALLOC);
 		return false;
 	}
 
-	memmove(&str->data[1], &str->data[0], str->length);
-	str->data[str->length++] = '\0';
-	str->data[0] = insert;
+	memmove(&str->data[count], &str->data[0], str->length);
+	for(size_t i = 0; i < count; ++i) {
+		str->data[i] = insert;
+	}
+	str->length += count;
+	str->data[str->length] = '\0';
 	return true;
 }
 
-bool string_pop_front(string_t *str) {
+bool string_pop_front(string_t *str, size_t count) {
 	// Validate string
 	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
 	}
-	if (str->length == 0) { return true; }
+	if (str->length == 0 || count == 0) { return true; }
 
-	memmove(&str->data[0], &str->data[1], str->length - 1);
-	str->data[--str->length] = '\0';
+	memmove(&str->data[0], &str->data[count], str->length - count);
+	str->length -= count;
+	str->data[str->length] = '\0';
 	return true;
 }
 
@@ -302,6 +313,7 @@ bool string_substr(string_t *src, size_t pos, size_t len, string_t* dst) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Destination string invalid");
 		return false;
 	}
+	if (pos + len > src->length) { len = src->length - pos; }
 	if (!_string_check_resize(dst, (dst->length > len) ? 0 : (len - dst->length))) {
 		NEO_THROW_ERROR(NERROR_BAD_ALLOC);
 		return false;
@@ -395,4 +407,56 @@ int string_wrap(string_t* str, size_t max_width) {
 		}
 	}
 	return line_count;
+}
+
+int string_truncate(string_t *str, size_t max_width, int elipses) {
+	// Validate string
+	NEO_CLEAR_ERROR;
+	if (!_string_valid(str)) { 
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
+		return -1;
+	}
+	if (str->length <= max_width) { return (int)str->length; }
+
+	// Trim string contents
+	if (elipses < 0) {
+		if (!string_erase(str, 0, str->length - max_width)) { return -1; }
+	}
+	else {
+		if (!string_erase(str, max_width, str->length - max_width)) { return -1; }
+	}
+
+	// Overwrite with elipses
+	if (elipses < 0) {
+		if (!string_set(str, 0, "...", 3)) { return -1; }
+	}
+	else if (elipses > 0) {
+		if (!string_set(str, str->length - 3, "...", 3)) { return -1; }
+	}
+	return str->length;
+}
+
+int string_find_next_of(string_t* str, const char* find, int len, size_t pos) {
+	// Validate string
+	NEO_CLEAR_ERROR;
+	if (!_string_valid(str)) { 
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
+		return -1;
+	}
+	if (pos == str->length) { return -1; }
+	else if (pos > str->length) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
+		return -1;
+	}
+	if (len < 0) { len = strlen(find); }
+
+	// Search string for characters
+	for(size_t i = pos; i < str->length; ++i) {
+		for(int j = 0; j < len; ++j) {
+			if (str->data[i] == find[j]) {
+				return (int)i;
+			}
+		}
+	}
+	return -1;
 }

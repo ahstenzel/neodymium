@@ -101,19 +101,19 @@ bool neo_edit_row_update(neo_edit_row_t* row) {
 	for(size_t j = 0; j < row->content.length; ++j) {
 		char c = string_at(&row->content, j);
 		if (c == '\t') {
-			if (!string_push_back(&row->rcontent, ' ')) { 
+			if (!string_push_back(&row->rcontent, ' ', 1)) { 
 				ret = false;
 				break;
 			}
 			while(row->rcontent.length % tab_length != 0) {
-				if (!string_push_back(&row->rcontent, ' ')) {
+				if (!string_push_back(&row->rcontent, ' ', 1)) {
 					ret = false;
 					break;
 				}
 			}
 		}
 		else {
-			if (!string_push_back(&row->rcontent, c)) {
+			if (!string_push_back(&row->rcontent, c, 1)) {
 				ret = false;
 				break;
 			}
@@ -249,7 +249,7 @@ bool neo_edit_page_init(neo_edit_page_t* page, neo_edit_ctx_t* context) {
 	memset(page->rows, 0, len);
 	int screen_rows, screen_cols;
 	getmaxyx(stdscr, screen_rows, screen_cols);
-	page->window_cols = MAX(screen_cols, 1);
+	page->window_cols = MAX(screen_cols, 4);
 	page->window_rows = MAX(screen_rows - (NEO_SIZE_HEADER + NEO_SIZE_FOOTER), 1);
 	page->nc_window = newwin(page->window_rows, page->window_cols, NEO_SIZE_HEADER, 0);
 	if (!page->nc_window) {
@@ -311,7 +311,7 @@ bool neo_edit_page_update(neo_edit_page_t* page) {
 	if (_neo_flag_resized) {
 		int screen_rows, screen_cols;
 		getmaxyx(stdscr, screen_rows, screen_cols);
-		page->window_cols = MAX(screen_cols, 1);
+		page->window_cols = MAX(screen_cols, 4);
 		page->window_rows = MAX(screen_rows - (NEO_SIZE_HEADER + NEO_SIZE_FOOTER), 1);
 		wresize(page->nc_window, page->window_rows, page->window_cols);
 	}
@@ -593,7 +593,7 @@ bool neo_edit_ctx_init(neo_edit_ctx_t* context) {
 	}
 	int screen_rows, screen_cols;
 	getmaxyx(stdscr, screen_rows, screen_cols);
-	context->window_cols = MAX(screen_cols, 1);
+	context->window_cols = MAX(screen_cols, 4);
 	context->window_rows = MAX(screen_rows - NEO_SIZE_MENU_BAR, NEO_SIZE_MENU_BAR + NEO_SIZE_FOOTER + 1);
 	context->nc_window = newwin(context->window_rows, context->window_cols, NEO_SIZE_MENU_BAR, 0);
 	if (!context->nc_window) {
@@ -671,7 +671,7 @@ bool neo_edit_ctx_update(neo_edit_ctx_t* context) {
 	if (_neo_flag_resized) {
 		int screen_rows, screen_cols;
 		getmaxyx(stdscr, screen_rows, screen_cols);
-		context->window_cols = MAX(screen_cols, 1);
+		context->window_cols = MAX(screen_cols, 4);
 		context->window_rows = MAX(screen_rows - NEO_SIZE_MENU_BAR, NEO_SIZE_MENU_BAR + NEO_SIZE_FOOTER + 1);
 		wresize(context->nc_window, context->window_rows, context->window_cols);
 	}
@@ -700,75 +700,143 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 		return false; 
 	}
 
-	// Draw file tabs
+	// Get all tab names
+	bool exit = false;
+	size_t curr_tab_pos = 0;
+	string_t all_names = { 0 };
+	if (!string_init(&all_names)) { return false; }
+	for(size_t i = 0; i < context->num_pages; ++i) {
+		neo_edit_page_t* page = &context->pages[i];
+
+		// Mark start of tab name with special character
+		if (i == context->curr_page) { 
+			curr_tab_pos = all_names.length; 
+			string_push_back(&all_names, '?', 1);
+		}
+		else {
+			string_push_back(&all_names, '/', 1);
+		}
+
+		// Page flags
+		if (PAGE_FLAG_ISSET(page, NPAGE_FLAG_DIRTY)) {
+			if (!string_push_back(&all_names, '*', 1)) {
+				exit = true;
+				break;
+			}
+		}
+
+		// Page name
+		if (string_empty(&page->filename)) {
+			if (!string_append(&all_names, "<New File>", -1)) { 
+				exit = true;
+				break;
+			}
+		}
+		else {
+			string_t truncated_filename = { 0 };
+			if (!string_init(&truncated_filename) ||
+				!string_duplicate(&page->filename, &truncated_filename) ||
+				string_truncate(&truncated_filename, (context->window_cols / 4), -1) < 0 ||
+				!string_append(&all_names, truncated_filename.data, truncated_filename.length)) {
+				string_clear(&truncated_filename);
+				exit = true;
+				break;
+			}
+			string_clear(&truncated_filename);
+		}
+		string_push_back(&all_names, '\\', 1);
+		string_push_back(&all_names, ' ', 2);
+	}
+	if (exit) { 
+		string_clear(&all_names);
+		return false; 
+	}
+
+	// Check if page tabs need to be truncated
+	size_t max_width = (context->window_cols - 2);
+	size_t margin = max_width / 2;
+	int tab_offset = 0;
+	if (all_names.length > max_width) {
+		// Try to put the currently selected tab in the middle of the bar
+		tab_offset = (int)(curr_tab_pos) - margin;
+		if (tab_offset < 0) { tab_offset = 0; }
+		else { 
+			tab_offset = string_find_next_of(&all_names, "?/", 2, tab_offset); 
+			if (tab_offset + max_width > all_names.length) { 
+				tab_offset = all_names.length - max_width;
+			}
+		}
+	}
+
+	// Truncate page tabs
+	string_t tab_string = { 0 };
+	if (!string_init(&tab_string) ||
+		!string_substr(&all_names, tab_offset, max_width, &tab_string)) {
+		string_clear(&tab_string);
+		string_clear(&all_names);
+		return false;
+	}
+
+	// If a name got cut off, clear its closing bracket
+	int open_offset = string_find_next_of(&tab_string, "?/", 2, 0);
+	int close_offset = string_find_next_of(&tab_string, "\\", 1, 0);
+	if (close_offset < open_offset && close_offset > -1) {
+		string_set(&tab_string, close_offset, " ", 1);
+	}
+
+	// Draw page tabs
 	wmove(context->nc_window, 2, 0);
 	whline(context->nc_window, ACS_HLINE, context->window_cols);
 	wmove(context->nc_window, 0, 0);
 	whline(context->nc_window, ' ', context->window_cols);
 	wmove(context->nc_window, 1, 0);
 	whline(context->nc_window, ' ', context->window_cols);
-	for(size_t i = 0; i < context->num_pages; ++i) {
-		neo_edit_page_t* page = &context->pages[i];
-
-		// Draw tab border (open)
-		if (i == context->curr_page) {
-			waddch(context->nc_window, ACS_VLINE);
-			wmove_cursor_down(context->nc_window, 1);
-			wmove_cursor_left(context->nc_window, 1);
-			waddch(context->nc_window, ACS_BTEE);
-			wmove_cursor_up(context->nc_window, 1);
+	wmove(context->nc_window, 1, 1);
+	wprintw(context->nc_window, "%s", tab_string.data);
+	int offset = -1;
+	do {
+		offset = string_find_next_of(&tab_string, "?/", 2, offset + 1);
+		if (offset > -1) {
+			if (string_at(&tab_string, offset) == '/') {
+				wmove(context->nc_window, 1, offset + 1);
+				waddch(context->nc_window, ' ');
+				offset = string_find_next_of(&tab_string, "\\", 1, offset + 1);
+				wmove(context->nc_window, 1, offset + 1);
+				waddch(context->nc_window, ' ');
+			}
+			else if (string_at(&tab_string, offset) == '?') {
+				wmove(context->nc_window, 1, offset + 1);
+				waddch(context->nc_window, ACS_VLINE);
+				int next_offset = string_find_next_of(&tab_string, "\\", 1, offset + 1);
+				int dist = next_offset - offset;
+				wmove(context->nc_window, 1, next_offset + 1);
+				waddch(context->nc_window, ACS_VLINE);
+				wmove(context->nc_window, 0, offset + 1);
+				whline(context->nc_window, ACS_HLINE, dist);
+				waddch(context->nc_window, ACS_ULCORNER);
+				wmove(context->nc_window, 0, next_offset + 1);
+				waddch(context->nc_window, ACS_URCORNER);
+				wmove(context->nc_window, 2, offset + 1);
+				whline(context->nc_window, ' ', dist);
+				waddch(context->nc_window, ACS_LRCORNER);
+				wmove(context->nc_window, 2, next_offset + 1);
+				waddch(context->nc_window, ACS_LLCORNER);
+				offset = next_offset;
+			}
 		}
-		else {
-			waddch(context->nc_window, ' ');
-		}
+	} while(offset > -1);
 
-		// Set attributes
-		if (i == context->curr_page) { wattron(context->nc_window, A_BOLD); }
-
-		// Draw flags
-		size_t filename_len = 0;
-		if (PAGE_FLAG_ISSET(page, NPAGE_FLAG_DIRTY)) {
-			filename_len++;
-			waddch(context->nc_window, '*');
-		}
-
-		// Draw filename
-		string_t filename;
-		if (!string_init(&filename)) { return false; }
-		if (string_empty(&page->filename)) {
-			if (!string_set(&filename, 0, "<New File>", -1)) { return false; }
-		}
-		else {
-			if (!string_duplicate(&page->filename, &filename)) { return false; }
-		}
-		wprintw(context->nc_window, "%s", filename.data);
-		filename_len += filename.length;
-		string_clear(&filename);
-
-		// Clear attributes
-		if (i == context->curr_page) { wattroff(context->nc_window, A_BOLD); }
-
-		// Draw tab border (close)
-		if (i == context->curr_page) {
-			waddch(context->nc_window, ACS_VLINE);
-			wmove_cursor_down(context->nc_window, 1);
-			wmove_cursor_left(context->nc_window, 1);
-			waddch(context->nc_window, ACS_BTEE);
-			wmove_cursor_up(context->nc_window, 2);
-			wmove_cursor_left(context->nc_window, filename_len + 2);
-			waddch(context->nc_window, ACS_ULCORNER);
-			whline(context->nc_window, ACS_HLINE, filename_len);
-			wmove_cursor_right(context->nc_window, filename_len);
-			waddch(context->nc_window, ACS_URCORNER);
-			wmove_cursor_down(context->nc_window, 1);
-		}
-		else {
-			waddch(context->nc_window, ' ');
-		}
-
-		// Spacer
-		wprintw(context->nc_window, "  ");
+	// Draw arrows
+	if (tab_offset > 0) {
+		wmove(context->nc_window, 1, 0);
+		waddch(context->nc_window, ACS_LARROW | A_REVERSE);
 	}
+	if ((tab_offset + max_width) < all_names.length) {
+		wmove(context->nc_window, 1, context->window_cols - 1);
+		waddch(context->nc_window, ACS_RARROW | A_REVERSE);
+	}
+	string_clear(&all_names);
+	string_clear(&tab_string);
 
 	// Draw page contents
 	neo_edit_page_t* curr_page = EDITOR_GET_CURR_PAGE(context);

@@ -78,10 +78,10 @@ bool string_erase_all(string_t* str);
  * @brief Append characters to the end of the string.
  * @param str String pointer
  * @param insert Text to insert
- * @param len Number of characters to insert
+ * @param len Number of characters to insert (if < 0, will calculate with strlen)
  * @return True if successful
  */
-bool string_append(string_t* str, const char* insert, size_t len);
+bool string_append(string_t* str, const char* insert, int len);
 
 /**
  * @brief Overwrite text in the string.
@@ -101,31 +101,35 @@ bool string_set(string_t* str, size_t pos, const char* insert, int len);
  * @brief Add one character to the end of the string.
  * @param str String pointer
  * @param insert Character to add
+ * @param count Number of times to add the character
  * @return True if successful
  */
-bool string_push_back(string_t* str, char insert);
+bool string_push_back(string_t* str, char insert, size_t count);
 
 /**
  * @brief Remove one character from the end of the string.
  * @param str String pointer
+ * @param count Number of times to remove a character
  * @return True if successful
  */
-bool string_pop_back(string_t* str);
+bool string_pop_back(string_t* str, size_t count);
 
 /**
  * @brief Add one character to the start of the string.
  * @param str String pointer
  * @param insert Character to add
+ * @param count Number of times to add the character
  * @return True if successful
  */
-bool string_push_front(string_t* str, char insert);
+bool string_push_front(string_t* str, char insert, size_t count);
 
 /**
  * @brief Remove one character from the start of the string.
  * @param str String pointer
+ * @param count Number of times to remove a character
  * @return True if successful
  */
-bool string_pop_front(string_t* str);
+bool string_pop_front(string_t* str, size_t count);
 
 /**
  * @brief Get a character at a position in the string.
@@ -211,5 +215,24 @@ int string_reserve(string_t* str, size_t new_capacity);
  * @return Number of lines the string takes up (or -1 on error)
  */
 int string_wrap(string_t* str, size_t max_width);
+
+/**
+ * @brief Trim the string to the maximum width, adding elipses if it goes over.
+ * @param str String pointer
+ * @param max_width Max number of characters (including elipses)
+ * @param trunc_start If <0, add elipses at the start. If >0, add elipses at the end. If 0, do not add elipses.
+ * @return New string length (or -1 on error)
+ */
+int string_truncate(string_t* str, size_t max_width, int elipses);
+
+/**
+ * @brief Get the next position of any of the given characters.
+ * @param str String pointer
+ * @param find Array of characters to search for
+ * @param len Size of array (if < 0, will calculate with strlen)
+ * @param pos Position to start searching at
+ * @return Next character position (or -1 if not found)
+ */
+int string_find_next_of(string_t* str, const char* find, int len, size_t pos);
 
 #endif // NEO_STRING_H
