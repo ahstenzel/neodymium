@@ -323,9 +323,10 @@ bool neo_edit_page_update(neo_edit_page_t* page) {
 		if (!neo_edit_row_update(row)) { 
 			return false; 
 		}
+		page->num_cols = MAX(page->num_cols, row->rcontent.length);
 	}
 
-	// Calculate cursor position
+	// Calculate rendered cursor position
 	if (page->cursor_y < page->num_rows) {
 		page->rcursor_x = neo_edit_row_cursor_update(PAGE_GET_CURR_ROW(page), page->cursor_x);
 		page->rcursor_y = page->cursor_y;
@@ -333,6 +334,30 @@ bool neo_edit_page_update(neo_edit_page_t* page) {
 	else {
 		page->rcursor_x = 0;
 		page->rcursor_y = page->cursor_y;
+	}
+
+	// Calculate scroll offsets
+	if ((int)page->cursor_y - NEO_SCROLL_MARGIN < (int)page->row_off) {
+		page->row_off = MAX(0, (int)(page->cursor_y) - NEO_SCROLL_MARGIN);
+	}
+	if (page->cursor_y + NEO_SCROLL_MARGIN >= page->row_off + page->window_rows) {
+		page->row_off = MIN(
+			(page->num_rows + NEO_SCROLL_MARGIN + 1) - page->window_rows,
+			(page->cursor_y - page->window_rows) + NEO_SCROLL_MARGIN + 1
+		);
+	}
+	if ((int)page->rcursor_x - NEO_SCROLL_MARGIN < (int)page->col_off) {
+		page->col_off = MAX(0, (int)(page->rcursor_x) - NEO_SCROLL_MARGIN);
+	}
+	if (page->rcursor_x + NEO_SCROLL_MARGIN >= page->col_off + page->window_cols) {
+		neo_edit_row_t* row = PAGE_GET_CURR_ROW(page);
+		if (!row) { page->col_off = 0; }
+		else {
+			page->col_off = MIN(
+				((int)(row->rcontent.length) + NEO_SCROLL_MARGIN + 1) - page->window_cols,
+				(page->rcursor_x - page->window_cols) + NEO_SCROLL_MARGIN + 1
+			);
+		}
 	}
 
 	return true;
@@ -354,8 +379,48 @@ bool neo_edit_page_draw(neo_edit_page_t* page) {
 		if (row_idx >= page->num_rows) { waddch(page->nc_window, '~'); }
 		else {
 			neo_edit_row_t* row = &page->rows[row_idx];
-			wprintw(page->nc_window, "%s", row->rcontent.data);
+			int len = CLAMP((int)row->rcontent.length - (int)page->col_off, 0, (int)page->window_cols);
+			waddnstr(page->nc_window, &row->rcontent.data[page->col_off], len);
 		}
+	}
+
+	// Draw vertical scroll bar
+	if (page->num_rows + NEO_SCROLL_MARGIN >= page->window_rows) {
+		// Calculate bar size & offset
+		float size_ratio = page->window_rows / (float)(page->num_rows + 1 + NEO_SCROLL_MARGIN);
+		int bar_size = MAX(1, (int)(size_ratio * (page->window_rows - 2)));
+		float offset_ratio = page->row_off / (float)((page->num_rows + 1 + NEO_SCROLL_MARGIN) - page->window_rows);
+		int bar_offset = (int)(offset_ratio * (page->window_rows - 2 - bar_size));
+
+		// Draw bar
+		wmove(page->nc_window, 0, page->window_cols - 1);
+		waddch(page->nc_window, ACS_UARROW | A_REVERSE);
+		wmove(page->nc_window, 1, page->window_cols - 1);
+		wvline(page->nc_window, ACS_VLINE, page->window_rows - 2);
+		wmove(page->nc_window, 1 + bar_offset, page->window_cols - 1);
+		wvline(page->nc_window, ' ' | A_REVERSE, bar_size);
+		wmove(page->nc_window, page->window_rows - 1, page->window_cols - 1);
+		waddch(page->nc_window, ACS_DARROW | A_REVERSE);
+	}
+
+	// Draw horizontal scroll bar
+	if (page->num_cols + NEO_SCROLL_MARGIN >= page->window_cols) {
+		// Calculate bar size & offset
+		float size_ratio = page->window_cols / (float)(page->num_cols + 1 + NEO_SCROLL_MARGIN);
+		int bar_size = MAX(1, (int)(size_ratio * (page->window_cols - 2)));
+		float offset_ratio = page->col_off / (float)((page->num_cols + 1 + NEO_SCROLL_MARGIN) - page->window_cols);
+		int bar_offset = (int)(offset_ratio * (page->window_cols - 2 - bar_size));
+
+		// Draw bar
+		wmove(page->nc_window, page->window_rows - 1, 0);
+		waddch(page->nc_window, ACS_LARROW | A_REVERSE);
+		whline(page->nc_window, ACS_HLINE, page->window_cols - 2);
+		wmove(page->nc_window, page->window_rows - 1, 1 + bar_offset);
+		whline(page->nc_window, ' ' | A_REVERSE, bar_size);
+		wmove(page->nc_window, page->window_rows - 1, page->window_cols - 1);
+		waddch(page->nc_window,
+			((page->num_rows + NEO_SCROLL_MARGIN >= page->window_rows) ? 'x' : ACS_RARROW) | A_REVERSE
+		);
 	}
 	return true;
 }
@@ -866,10 +931,10 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 
 	// Set final cursor position
 	if (curr_page) {
-		wmove(curr_page->nc_window, (int)curr_page->rcursor_y, (int)curr_page->rcursor_x);
+		wmove(curr_page->nc_window, (int)(curr_page->rcursor_y - curr_page->row_off), (int)(curr_page->rcursor_x - curr_page->col_off));
 	}
 	else {
-		wmove(context->nc_window, NEO_SIZE_FILE_BAR, 0);
+		wmove(context->nc_window, 0, 0);
 	}
 	return true;
 }

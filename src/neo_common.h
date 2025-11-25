@@ -52,7 +52,7 @@
 #define NEO_SIZE_FILE_BAR 3
 #define NEO_SIZE_HEADER (NEO_SIZE_MENU_BAR+NEO_SIZE_FILE_BAR)
 #define NEO_SIZE_FOOTER 2
-#define NEO_SCROLL_MARGIN 1
+#define NEO_SCROLL_MARGIN 3
 
 
 // ============================================== functional macros
