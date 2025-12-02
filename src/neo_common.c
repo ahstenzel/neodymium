@@ -6,6 +6,7 @@ bool _neo_flag_resized = false;
 int _neo_ext_signal = 0;
 
 bool ncurses_init() {
+	setlocale(LC_ALL, "");
 	initscr();
 	cbreak();
 	noecho();

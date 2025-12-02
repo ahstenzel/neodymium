@@ -5,10 +5,7 @@
 #ifndef NEO_STRING_H
 #define NEO_STRING_H
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include "neo_common.h"
 
 /**
  * @brief Default capacity for a newly initialized string.
@@ -16,12 +13,17 @@
 #define NEO_STRING_DEFAULT_CAPACITY 128
 
 /**
+ * @brief Size of a single character in memory.
+ */
+#define NEO_CHAR_SIZE sizeof(NEO_CHAR_T)
+
+/**
  * @brief Dynamically resizing null-terminated text buffer.
  */
 typedef struct {
-	char* data;         /** Character data. */
-	size_t length;      /** Length of the string (not counting the null termintor). */ 
-	size_t capacity;    /** Internal size of the character buffer. */
+	NEO_CHAR_T* data; /** Character data. */
+	size_t length;       /** Length of the string (not counting the null termintor). */ 
+	size_t capacity;     /** Internal size of the character buffer. */
 } string_t;
 
 /**
@@ -52,7 +54,7 @@ void string_clear(string_t* str);
  * @param len Number of characters to insert
  * @return True if successful
  */
-bool string_insert(string_t* str, size_t pos, const char* insert, size_t len);
+bool string_insert(string_t* str, size_t pos, const NEO_CHAR_T* insert, size_t len);
 
 /**
  * @brief Erase characters from the string.
@@ -81,7 +83,7 @@ bool string_erase_all(string_t* str);
  * @param len Number of characters to insert (if < 0, will calculate with strlen)
  * @return True if successful
  */
-bool string_append(string_t* str, const char* insert, int len);
+bool string_append(string_t* str, const NEO_CHAR_T* insert, int len);
 
 /**
  * @brief Overwrite text in the string.
@@ -95,7 +97,7 @@ bool string_append(string_t* str, const char* insert, int len);
  * @param len Number of characters to overwrite (if < 0, will calculate with strlen)
  * @return True if successful
  */
-bool string_set(string_t* str, size_t pos, const char* insert, int len);
+bool string_set(string_t* str, size_t pos, const NEO_CHAR_T* insert, int len);
 
 /**
  * @brief Add one character to the end of the string.
@@ -104,7 +106,7 @@ bool string_set(string_t* str, size_t pos, const char* insert, int len);
  * @param count Number of times to add the character
  * @return True if successful
  */
-bool string_push_back(string_t* str, char insert, size_t count);
+bool string_push_back(string_t* str, NEO_CHAR_T insert, size_t count);
 
 /**
  * @brief Remove one character from the end of the string.
@@ -121,7 +123,7 @@ bool string_pop_back(string_t* str, size_t count);
  * @param count Number of times to add the character
  * @return True if successful
  */
-bool string_push_front(string_t* str, char insert, size_t count);
+bool string_push_front(string_t* str, NEO_CHAR_T insert, size_t count);
 
 /**
  * @brief Remove one character from the start of the string.
@@ -137,7 +139,7 @@ bool string_pop_front(string_t* str, size_t count);
  * @param pos Position to check
  * @return Character (or \0 if out of bounds)
  */
-char string_at(string_t* str, size_t pos);
+NEO_CHAR_T string_at(string_t* str, size_t pos);
 
 /**
  * @brief Check if the string has no characters.
@@ -151,14 +153,14 @@ bool string_empty(string_t* str);
  * @param str String pointer
  * @return Character at position 0 (or \0 for an empty string)
  */
-char string_front(string_t* str);
+NEO_CHAR_T string_front(string_t* str);
 
 /**
  * @brief Get the character at the end of the string.
  * @param str String pointer
  * @return Character at position (length - 1) (or \0 for an empty string)
  */
-char string_back(string_t* str);
+NEO_CHAR_T string_back(string_t* str);
 
 /**
  * @brief Duplicate the strings contents.
@@ -233,6 +235,6 @@ int string_truncate(string_t* str, size_t max_width, int elipses);
  * @param pos Position to start searching at
  * @return Next character position (or -1 if not found)
  */
-int string_find_next_of(string_t* str, const char* find, int len, size_t pos);
+int string_find_next_of(string_t* str, const NEO_CHAR_T* find, int len, size_t pos);
 
 #endif // NEO_STRING_H

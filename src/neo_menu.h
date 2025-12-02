@@ -27,7 +27,7 @@
  */
 struct neo_menu_entry_t {
 	string_t name;
-	char shortcut;
+	NEO_CHAR_T shortcut;
 	void* callback;
 	bool seperator;
 };
@@ -42,7 +42,7 @@ struct neo_menu_group_t {
 	size_t num_entries;
 	size_t max_entries;
 	int selected;
-	char shortcut;
+	NEO_CHAR_T shortcut;
 };
 typedef struct neo_menu_group_t neo_menu_group_t;
 
@@ -90,7 +90,7 @@ void neo_menu_group_clear(neo_menu_group_t* group);
  * @param entry_callback Callback function for the entry
  * @return Menu entry pointer (or NULL on error)
  */
-neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int position, const char* entry_name, char entry_shortcut, void* entry_callback);
+neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int position, const NEO_CHAR_T* entry_name, NEO_CHAR_T entry_shortcut, void* entry_callback);
 
 /**
  * @brief Insert a seperator into the menu group
@@ -113,7 +113,7 @@ neo_menu_entry_t* neo_menu_group_get_entry(neo_menu_group_t* group, int position
  * @param name Entry name
  * @return Entry position (or -1 on error)
  */
-int neo_menu_group_get_entry_position(neo_menu_group_t* group, const char* name);
+int neo_menu_group_get_entry_position(neo_menu_group_t* group, const NEO_CHAR_T* name);
 
 /**
  * @brief Remove the menu entry at the given position.
@@ -164,7 +164,7 @@ bool neo_menu_bar_draw(neo_menu_bar_t* bar);
  * @param group_shortcut Shortcut for the entry
  * @return Menu group pointer (or NULL on error)
  */
-neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t* bar, int position, const char* group_name, char group_shortcut);
+neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t* bar, int position, const NEO_CHAR_T* group_name, NEO_CHAR_T group_shortcut);
 
 /**
  * @brief Get the menu group at the given position.
@@ -180,7 +180,7 @@ neo_menu_group_t* neo_menu_bar_get_group(neo_menu_bar_t* bar, int position);
  * @param group_name Group name
  * @return Group position (or -1 on error)
  */
-int neo_menu_bar_get_group_position(neo_menu_bar_t* bar, const char* name);
+int neo_menu_bar_get_group_position(neo_menu_bar_t* bar, const NEO_CHAR_T* name);
 
 /**
  * @brief Remove the menu group at the given position.

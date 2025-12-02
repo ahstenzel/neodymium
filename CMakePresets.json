@@ -1,0 +1,99 @@
+{
+	"version": 3,
+	"configurePresets": [
+		{
+			"name": "base",
+			"hidden": true,
+			"binaryDir": "${sourceDir}/out/build/${presetName}",
+			"generator": "Ninja",
+			"cacheVariables": {
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+				"CMAKE_EXPORT_COMPILE_COMMANDS": true,
+				"BUILD_SHARED_LIBS": false
+			}
+		},
+		{
+			"name": "base-arch_x64",
+			"hidden": true,
+			"architecture": {
+				"strategy": "external",
+				"value": "x64"
+			},
+			"cacheVariables": {
+				"BUILD_ARCH": "x64"
+			}
+		},
+		{
+			"name": "base-arch_arm64",
+			"hidden": true,
+			"toolchainFile": "${sourceDir}/cmake/arm_toolchain.cmake",
+			"architecture": {
+				"strategy": "external",
+				"value": "arm64"
+			},
+			"cacheVariables": {
+				"BUILD_ARCH": "arm64"
+			}
+		},
+		{
+			"name": "base-conf_debug",
+			"hidden": true,
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug"
+			}
+		},
+		{
+			"name": "base-conf_release",
+			"hidden": true,
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release"
+			}
+		},
+		{
+			"name": "debug-x64",
+			"displayName": "Debug (x64)",
+			"inherits": [ "base", "base-arch_x64", "base-conf_debug" ]
+		},
+		{
+			"name": "release-x64",
+			"displayName": "Release (x64)",
+			"inherits": [ "base", "base-arch_x64", "base-conf_release" ]
+		},
+		{
+			"name": "debug-arm64",
+			"displayName": "Debug (arm64)",
+			"inherits": [ "base", "base-arch_arm64", "base-conf_debug" ]
+		},
+		{
+			"name": "release-arm64",
+			"displayName": "Release (arm64)",
+			"inherits": [ "base", "base-arch_arm64", "base-conf_release" ]
+		}
+	],
+	"buildPresets": [
+		{
+			"name": "debug-x64",
+			"displayName": "Debug (x64)",
+			"configurePreset": "debug-x64",
+			"configuration": "Debug"
+		},
+		{
+			"name": "release-x64",
+			"displayName": "Release (x64)",
+			"configurePreset": "release-x64",
+			"configuration": "Release"
+		},
+		{
+			"name": "debug-arm64",
+			"displayName": "Debug (arm64)",
+			"configurePreset": "debug-arm64",
+			"configuration": "Debug"
+		},
+		{
+			"name": "release-arm64",
+			"displayName": "Release (arm64)",
+			"configurePreset": "release-arm64",
+			"configuration": "Release"
+		}
+	]
+}

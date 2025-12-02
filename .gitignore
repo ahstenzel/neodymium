@@ -61,6 +61,7 @@ src/debian/neodymium/
 src/debian/debhelper-build-stamp
 src/debian/files
 src/debian/neodymium.substvars
+out/
 
 # Vendor libraries
 vendor/vex
@@ -69,3 +70,5 @@ vendor/komihash
 # Documentation
 docs/html/
 docs/latex/
+
+_old/

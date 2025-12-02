@@ -117,7 +117,7 @@ void neo_menu_group_clear(neo_menu_group_t* group) {
 	group->selected = -1;
 }
 
-neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int position, const char *entry_name, char entry_shortcut, void* entry_callback) {
+neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int position, const NEO_CHAR_T *entry_name, NEO_CHAR_T entry_shortcut, void* entry_callback) {
 	// Validate group
 	NEO_CLEAR_ERROR;
 	size_t idx = 0;
@@ -140,7 +140,7 @@ neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int posit
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize menu entry name");
 		return NULL;
 	}
-	if (!string_set(&name_str, 0, entry_name, strlen(entry_name))) {
+	if (!string_set(&name_str, 0, entry_name, neo_strlen(entry_name))) {
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to set menu entry name");
 		return NULL;
 	}
@@ -204,7 +204,7 @@ neo_menu_entry_t* neo_menu_group_get_entry(neo_menu_group_t* group, int position
 	return &group->entries[idx];
 }
 
-int neo_menu_group_get_entry_position(neo_menu_group_t *group, const char *name) {
+int neo_menu_group_get_entry_position(neo_menu_group_t *group, const NEO_CHAR_T *name) {
 	// Validate group
 	NEO_CLEAR_ERROR;
 	if (!_neo_menu_group_valid(group)) { 
@@ -214,7 +214,7 @@ int neo_menu_group_get_entry_position(neo_menu_group_t *group, const char *name)
 
 	// Iterate over entries
 	for(size_t i = 0; i < group->num_entries; ++i) {
-		if (strcmp(group->entries[i].name.data, name) == 0) {
+		if (neo_strcmp(group->entries[i].name.data, name) == 0) {
 			return (int)i;
 		}
 	}
@@ -331,18 +331,18 @@ bool neo_menu_bar_draw(neo_menu_bar_t *bar) {
 	wmove(bar->nc_window, 0, 0);
 	for(size_t i = 0; i < bar->num_groups; ++i) {
 		neo_menu_group_t* group = &bar->groups[i];
-		wprintw(bar->nc_window, " %s ", group->name.data);
-		waddch(bar->nc_window, ACS_VLINE);
+		neo_waddnstr(bar->nc_window, group->name.data, group->name.length);
+		neo_waddch(bar->nc_window, ACS_VLINE);
 		wmove_cursor_down(bar->nc_window, 1);
 		wmove_cursor_left(bar->nc_window, 1);
-		waddch(bar->nc_window, ACS_BTEE);
+		neo_waddch(bar->nc_window, ACS_BTEE);
 		wmove_cursor_up(bar->nc_window, 1);
 	}
 	
 	return true;
 }
 
-neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, const char *group_name, char group_shortcut) {
+neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, const NEO_CHAR_T *group_name, NEO_CHAR_T group_shortcut) {
 	// Validate bar
 	NEO_CLEAR_ERROR;
 	size_t idx = 0;
@@ -365,7 +365,7 @@ neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, c
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize menu group");
 		return NULL;
 	}
-	if (!string_set(&new_group.name, 0, group_name, strlen(group_name))) {
+	if (!string_set(&new_group.name, 0, group_name, neo_strlen(group_name))) {
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to set menu group name");
 		return NULL;
 	}
@@ -396,7 +396,7 @@ neo_menu_group_t* neo_menu_bar_get_group(neo_menu_bar_t* bar, int position) {
 	return &bar->groups[idx];
 }
 
-int neo_menu_bar_get_group_position(neo_menu_bar_t* bar, const char* name) {
+int neo_menu_bar_get_group_position(neo_menu_bar_t* bar, const NEO_CHAR_T* name) {
 	// Validate bar
 	NEO_CLEAR_ERROR;
 	if (!_neo_menu_bar_valid(bar)) {
@@ -406,7 +406,7 @@ int neo_menu_bar_get_group_position(neo_menu_bar_t* bar, const char* name) {
 
 	// Iterate over entries
 	for(size_t i = 0; i < bar->num_groups; ++i) {
-		if (strcmp(bar->groups[i].name.data, name) == 0) {
+		if (neo_strcmp(bar->groups[i].name.data, name) == 0) {
 			return (int)i;
 		}
 	}

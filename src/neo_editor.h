@@ -179,7 +179,7 @@ bool neo_edit_row_update(neo_edit_row_t* row);
  * @param len Number of characters to insert
  * @return True if successful
  */
-bool neo_edit_row_insert_text(neo_edit_row_t* row, int position, const char* insert, size_t len);
+bool neo_edit_row_insert_text(neo_edit_row_t* row, int position, const NEO_CHAR_T* insert, size_t len);
 
 /**
  * @brief Overwrite the text of the row.
@@ -188,7 +188,7 @@ bool neo_edit_row_insert_text(neo_edit_row_t* row, int position, const char* ins
  * @param len Number of characters to insert
  * @return True if successful
  */
-bool neo_edit_row_set_text(neo_edit_row_t* row, const char* insert, size_t len);
+bool neo_edit_row_set_text(neo_edit_row_t* row, const NEO_CHAR_T* insert, size_t len);
 
 /**
  * @brief Erase text from the row at the given position.
@@ -348,7 +348,7 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t* context);
  * @param filename Full filename
  * @return Index of new page (or SIZE_MAX on error)
  */
-size_t neo_edit_ctx_open_page(neo_edit_ctx_t* context, char* filename);
+size_t neo_edit_ctx_open_page(neo_edit_ctx_t* context, NEO_CHAR_T* filename);
 
 /**
  * @brief Open a new blank page.
@@ -388,6 +388,6 @@ bool neo_edit_ctx_handle_input(neo_edit_ctx_t* context, int key);
  * @param ... printf-style arguments
  * @return Length of printed message
  */
-int neo_edit_ctx_status(neo_edit_ctx_t* context, const char* fmt, ...);
+int neo_edit_ctx_status(neo_edit_ctx_t* context, const NEO_CHAR_T* fmt, ...);
 
 #endif // NEO_EDITOR_H

@@ -10,7 +10,7 @@ int neo_cb_new_file(neo_edit_ctx_t* context) {
 int neo_cb_open_file(neo_edit_ctx_t* context) {
 	string_t message;
 	string_init(&message);
-	string_set(&message, 0, "Open file!", -1);
+	string_set(&message, 0, NEO_STR_CAST("Open file!"), -1);
 	neo_dialog_message(context, &message);
 	string_clear(&message);
 	return 0;
@@ -19,7 +19,7 @@ int neo_cb_open_file(neo_edit_ctx_t* context) {
 int neo_cb_save_file(neo_edit_ctx_t* context) {
 	string_t message;
 	string_init(&message);
-	string_set(&message, 0, "Save file!", -1);
+	string_set(&message, 0, NEO_STR_CAST("Save file!"), -1);
 	neo_dialog_message(context, &message);
 	string_clear(&message);
 	return 0;
@@ -28,7 +28,7 @@ int neo_cb_save_file(neo_edit_ctx_t* context) {
 int neo_cb_save_file_as(neo_edit_ctx_t* context) {
 	string_t message;
 	string_init(&message);
-	string_set(&message, 0, "Save file as!", -1);
+	string_set(&message, 0, NEO_STR_CAST("Save file as!"), -1);
 	neo_dialog_message(context, &message);
 	string_clear(&message);
 	return 0;
@@ -37,7 +37,7 @@ int neo_cb_save_file_as(neo_edit_ctx_t* context) {
 int neo_cb_save_all_file(neo_edit_ctx_t* context) {
 	string_t message;
 	string_init(&message);
-	string_set(&message, 0, "Save all files!", -1);
+	string_set(&message, 0, NEO_STR_CAST("Save all files!"), -1);
 	neo_dialog_message(context, &message);
 	string_clear(&message);
 	return 0;
@@ -149,10 +149,10 @@ bool neo_dialog_message(neo_edit_ctx_t* context, string_t* message) {
 	// Draw window contents
 	wborder(nc_window, 0, 0, 0, 0, 0, 0, 0, 0);
 	wmove(nc_window, 1, 2);
-	wprintw(nc_window, "%s", message->data);
+	neo_waddnstr(nc_window, message->data, message->length);
 	wmove(nc_window, 1 + line_count, (window_cols - 4) / 2);
 	wattron(nc_window, A_REVERSE);
-	wprintw(nc_window, "[OK]");
+	neo_waddnstr(nc_window, NEO_STR_CAST("[OK]"), 4);
 	wattroff(nc_window, A_REVERSE);
 	curs_set(0);
 

@@ -14,6 +14,28 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
+#ifndef _XOPEN_SOURCE_EXTENDED
+#define _XOPEN_SOURCE_EXTENDED
+#endif
+
+
+// ============================================== version strings
+
+#define STRINGIFY_(X) #X
+#define STRINGIFY(X) STRINGIFY_(X)
+#define MAKE_VERSION_STR(major, minor, patch) (STRINGIFY(major) "." STRINGIFY(minor) "." STRINGIFY(patch))
+
+#ifndef NEO_VERSION_MAJOR
+#define NEO_VERSION_MAJOR 0
+#endif
+#ifndef NEO_VERSION_MINOR
+#define NEO_VERSION_MINOR 0
+#endif
+#ifndef NEO_VERSION_PATCH
+#define NEO_VERSION_PATCH 0
+#endif
+
+#define NEO_VERSION_STR MAKE_VERSION_STR(NEO_VERSION_MAJOR, NEO_VERSION_MINOR, NEO_VERSION_PATCH)
 
 
 // ============================================== includes
@@ -24,17 +46,70 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <string.h>
 #include <signal.h>
 #include <time.h>
 #include <libgen.h>
 #include <ctype.h>
 #include <assert.h>
+#include <locale.h>
+//#define NEO_USE_WCHAR
+#ifdef NEO_USE_WCHAR
+#include <ncursesw/ncurses.h>
+#else
 #include <ncurses.h>
+#endif
 #include <menu.h>
 #include <panel.h>
 
 
 // ============================================== defines
+
+#ifdef NEO_USE_WCHAR
+
+#include <wchar.h>
+
+/**
+ * @brief Character type used for strings.
+ */
+#define NEO_CHAR_T wchar_t
+
+#define NEO_STR_CAST(s) L ## s
+
+#define neo_memmove wmemmove
+#define neo_memcpy wmemcpy
+#define neo_strlen wcslen
+#define neo_strcmp wcscmp
+#define neo_strncmp wcsncmp
+#define neo_vsnprintf vswprintf
+
+#define neo_waddnstr waddnwstr
+#define neo_waddch waddch
+#define neo_wvline wvline
+#define neo_hvline whline
+
+#else
+
+/**
+ * @brief Character type used for strings.
+ */
+#define NEO_CHAR_T char
+
+#define NEO_STR_CAST(s) s
+
+#define neo_memmove memmove
+#define neo_memcpy memcpy
+#define neo_strlen strlen
+#define neo_strcmp strcmp
+#define neo_strncmp strncmp
+#define neo_vsnprintf vsnprintf
+
+#define neo_waddnstr waddnstr
+#define neo_waddch waddch
+#define neo_wvline wvline
+#define neo_hvline whline
+
+#endif
 
 #ifndef NEO_MALLOC
 #define NEO_MALLOC malloc
