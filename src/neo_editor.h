@@ -106,6 +106,7 @@ struct neo_edit_page_t {
 	WINDOW* nc_window;
 	PANEL* nc_panel;
 	string_t filename;
+	string_t filename_base;
 	size_t num_rows;
 	size_t max_rows;
 	size_t num_cols;
@@ -348,7 +349,7 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t* context);
  * @param filename Full filename
  * @return Index of new page (or SIZE_MAX on error)
  */
-size_t neo_edit_ctx_open_page(neo_edit_ctx_t* context, NEO_CHAR_T* filename);
+size_t neo_edit_ctx_open_page(neo_edit_ctx_t* context, char* filename);
 
 /**
  * @brief Open a new blank page.

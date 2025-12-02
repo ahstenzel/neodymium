@@ -233,7 +233,7 @@ bool neo_edit_page_init(neo_edit_page_t* page, neo_edit_ctx_t* context) {
 	}
 
 	// Initialize string
-	if (!string_init(&page->filename)) {
+	if (!string_init(&page->filename) || !string_init(&page->filename_base)) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate filename string");
 		return false;
 	}
@@ -244,6 +244,7 @@ bool neo_edit_page_init(neo_edit_page_t* page, neo_edit_ctx_t* context) {
 	if (!page->rows) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate row buffer");
 		string_clear(&page->filename);
+		string_clear(&page->filename_base);
 		return false;
 	}
 	memset(page->rows, 0, len);
@@ -255,12 +256,14 @@ bool neo_edit_page_init(neo_edit_page_t* page, neo_edit_ctx_t* context) {
 	if (!page->nc_window) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate ncurses window");
 		string_clear(&page->filename);
+		string_clear(&page->filename_base);
 		return false;
 	}
 	page->nc_panel = new_panel(page->nc_window);
 	if (!page->nc_panel) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate ncurses panel");
 		string_clear(&page->filename);
+		string_clear(&page->filename_base);
 		return false;
 	}
 	page->context = context;
@@ -280,6 +283,7 @@ bool neo_edit_page_init(neo_edit_page_t* page, neo_edit_ctx_t* context) {
 void neo_edit_page_clear(neo_edit_page_t* page) {
 	if (!page) { return; }
 	string_clear(&page->filename);
+	string_clear(&page->filename_base);
 	if (page->rows) {
 		for(size_t i = 0; i < page->num_rows; ++i) {
 			neo_edit_row_clear(&page->rows[i]);
@@ -478,6 +482,7 @@ neo_edit_row_t* neo_edit_page_insert_row(neo_edit_page_t* page, int position) {
 	size_t n = sizeof(*(page->rows));
 	memmove(&page->rows[idx + 1], &page->rows[idx], n * (page->num_rows - idx));
 	memcpy(&page->rows[idx], &new_row, n);
+	PAGE_FLAG_SET(page, NPAGE_FLAG_DIRTY);
 	page->num_rows++;
 	return &page->rows[idx];
 }
@@ -505,6 +510,7 @@ void neo_edit_page_remove_row(neo_edit_page_t* page, int position) {
 	// Shift end of group backward
 	size_t n = sizeof(*(page->rows));
 	memmove(&page->rows[idx], &page->rows[idx + 1], n * (page->num_rows - idx - 1));
+	PAGE_FLAG_SET(page, NPAGE_FLAG_DIRTY);
 	page->num_rows--;
 }
 
@@ -610,8 +616,29 @@ void neo_edit_page_set_filename(neo_edit_page_t* page, string_t filename) {
 		return; 
 	}
 
+	// Strip file to basename
+	string_t filename_base = { 0 };
+	if (!string_init(&filename_base)) {
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize filename basename string");
+		return;
+	}
+	size_t idx = 0;
+	int pos = -1;
+	do {
+		pos = string_find_next_of(&filename, "/", 1, idx);
+		if (pos >= 0) { idx = pos + 1; }
+	} while(pos != -1);
+	if (!string_substr(&filename, idx, filename.length - idx, &filename_base)) {
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to trim filename to basename");
+		string_clear(&filename_base);
+		return;
+	}
+
+	// Replace current filename
 	string_clear(&page->filename);
 	page->filename = filename;
+	string_clear(&page->filename_base);
+	page->filename_base = filename_base;
 }
 
 size_t neo_edit_page_get_index(neo_edit_page_t* page) {
@@ -800,7 +827,7 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 		else {
 			string_t truncated_filename = { 0 };
 			if (!string_init(&truncated_filename) ||
-				!string_duplicate(&page->filename, &truncated_filename) ||
+				!string_duplicate(&page->filename_base, &truncated_filename) ||
 				string_truncate(&truncated_filename, (context->window_cols / 4), -1) < 0 ||
 				!string_append(&all_names, truncated_filename.data, truncated_filename.length)) {
 				string_clear(&truncated_filename);
@@ -939,7 +966,7 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 	return true;
 }
 
-size_t neo_edit_ctx_open_page(neo_edit_ctx_t *context, NEO_CHAR_T* filename) {
+size_t neo_edit_ctx_open_page(neo_edit_ctx_t *context, char* filename) {
 	// Validate context
 	NEO_CLEAR_ERROR;
 	if (!_neo_edit_ctx_valid(context)) {
@@ -959,19 +986,54 @@ size_t neo_edit_ctx_open_page(neo_edit_ctx_t *context, NEO_CHAR_T* filename) {
 	// Initialize page
 	size_t idx = context->num_pages;
 	string_t filename_str = { 0 };
+	NEO_CHAR_T* filename_full = NULL;
+	neo_edit_page_t* curr_page = &context->pages[idx];
 	if (!string_init(&filename_str)) {
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize page name string");
 		return SIZE_MAX;
 	}
-	if (!string_set(&filename_str, 0, filename, neo_strlen(filename))) {
+	if ((filename_full = ascii_to_string(filename, strlen(filename))) == NULL) {
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to convert page name string");
+		return SIZE_MAX;
+	}
+	if (!string_set(&filename_str, 0, filename_full, neo_strlen(filename_full))) {
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to set page name string");
 		return SIZE_MAX;
 	}
-	if (!neo_edit_page_init(&context->pages[idx], context)) {
+	if (!neo_edit_page_init(curr_page, context)) {
 		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to initialize new page");
 		return SIZE_MAX;
 	}
-	neo_edit_page_set_filename(&context->pages[idx], filename_str);
+	neo_edit_page_set_filename(curr_page, filename_str);
+	NEO_FREE(filename_full);
+
+	// Get file contents
+	FILE* fp = fopen(filename, "r");
+	if (fp) {
+		NEO_CHAR_T* line = NULL;
+		size_t n = 0;
+		ssize_t len = -1;
+		while((len = neo_getline(&line, &n, fp)) >= 0) {
+			// Trim newlines
+			while(len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+				len--;
+			}
+			neo_edit_row_t* curr_row = neo_edit_page_insert_row(curr_page, -1);
+			if (!curr_row) {
+				NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to add rows to file");
+				NEO_FREE(line);
+				return SIZE_MAX;
+			}
+			if (!neo_edit_row_set_text(curr_row, line, (size_t)(len))) {
+				NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to add text to file");
+				NEO_FREE(line);
+				return SIZE_MAX;
+			}
+		}
+		NEO_FREE(line);
+		fclose(fp);
+		PAGE_FLAG_CLEAR(curr_page, NPAGE_FLAG_DIRTY);
+	}
 	context->num_pages++;
 	return idx;
 }

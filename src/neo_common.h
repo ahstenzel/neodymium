@@ -82,6 +82,7 @@
 #define neo_strcmp wcscmp
 #define neo_strncmp wcsncmp
 #define neo_vsnprintf vswprintf
+#define neo_getline getwline
 
 #define neo_waddnstr waddnwstr
 #define neo_waddch waddch
@@ -103,6 +104,7 @@
 #define neo_strcmp strcmp
 #define neo_strncmp strncmp
 #define neo_vsnprintf vsnprintf
+#define neo_getline getline
 
 #define neo_waddnstr waddnstr
 #define neo_waddch waddch

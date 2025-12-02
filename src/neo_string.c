@@ -459,3 +459,35 @@ int string_find_next_of(string_t* str, const NEO_CHAR_T* find, int len, size_t p
 	}
 	return -1;
 }
+
+
+#ifdef NEO_USE_WCHAR
+
+NEO_CHAR_T* ascii_to_string(char* str, size_t len) {
+	NEO_CHAR_T* new_str = NEO_MALLOC(NEO_CHAR_SIZE * (len + 1));
+	if (!new_str) { 
+		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate wide string");
+		return NULL; 
+	}
+	if (mbstowcs(new_str, str, len) != len) {
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to convert string to wide string");
+		return NULL;
+	}
+	new_str[len] = '\0';
+	return new_str;
+}
+
+#else
+
+NEO_CHAR_T* ascii_to_string(char* str, size_t len) {
+	NEO_CHAR_T* new_str = strdup(str);
+	if (!new_str) {
+		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to duplicate string");
+		return NULL; 
+	}
+	return new_str;
+}
+
+#endif
+
+

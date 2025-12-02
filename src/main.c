@@ -40,40 +40,24 @@ int main(int argc, char** argv) {
 		}
 		else {
 			// Open files in editor
-			if (vex_token_count(&parser) > 0 && false) {
+			size_t page_idx = 0;
+			if (vex_token_count(&parser) > 0) {
 				for(int i = 0; i < vex_token_count(&parser); ++i) {
 					vex_arg_token* tok = vex_get_token(&parser, i);
 					char* filename = tok->arg->str_arg;
-					size_t idx = SIZE_MAX;
-
-					// Convert filenames to wide characters
-					#ifdef NEO_USE_WCHAR
-					size_t filename_len = strlen(filename);
-					NEO_CHAR_T* filename_w = NEO_MALLOC(NEO_CHAR_SIZE * (filename_len + 1));
-					if (!filename_w) {
-						NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate wide filename buffer");
-						break;
-					}
-					if (mbstowcs(filename_w, filename, filename_len) != filename_len) {
-						NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to convert filename to wide string");
-						break;
-					}
-					filename_w[filename_len] = '\0';
-					idx = neo_edit_ctx_open_page(&edit_ctx, filename_w);
-					#else
-					idx = neo_edit_ctx_open_page(&edit_ctx, filename);
-					#endif
-					if (idx == SIZE_MAX) {
+					if ((page_idx = neo_edit_ctx_open_page(&edit_ctx, filename)) == SIZE_MAX) {
 						NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to open file");
 						break;
 					}
+					else { neo_edit_ctx_set_page(&edit_ctx, page_idx); }
 				}
 			}
 			else {
-				if (neo_edit_ctx_new_page(&edit_ctx) == SIZE_MAX) {
+				if ((page_idx = neo_edit_ctx_new_page(&edit_ctx)) == SIZE_MAX) {
 					NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to create new file");
 					break;
 				}
+				else { neo_edit_ctx_set_page(&edit_ctx, page_idx); }
 			}
 		}
 	} while(0);
