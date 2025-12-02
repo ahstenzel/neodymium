@@ -9,17 +9,11 @@ pushd ${SCRIPT_DIR} > /dev/null
 
 function show_help
 {
-	echo "$0 [-b config] [-a arch]"
+	echo "Usage: $(basename $0) [-b config] [-a arch]"
 	echo " -b) Build configuration [debug(default) | release]"
 	echo " -a) Build architecture [x64(default) | arm64]"
 	echo " -h) Show this help dialogue"
 }
-
-# Check for sudo
-#if [[ $(id -u) -ne 0 ]]; then
-#	echo "Please run with root permissions."
-#	exit 1
-#fi
 
 # Get user options
 while test $# -gt 0; do
@@ -65,41 +59,48 @@ while [ $BUILD_ARCH = none ]; do
 done
 
 # Build app
-function do_cmake_configure
+function do_cmake_build
 {
+	echo -e "[${GREEN}*${NC}] Configuring CMake..."
 	cmake --preset $1
 	if [[ $? != 0 ]]; then
 		echo -e "[${RED}X${NC}] Configuration failed!"
 		popd > /dev/null
 		exit 1
 	fi
-}
 
-function do_cmake_build
-{
-	cmake --build --preset $1
+	echo -e "[${GREEN}*${NC}] Building app..."
+	cmake --build --preset $1 --target install
 	if [[ $? != 0 ]]; then
 		echo -e "[${RED}X${NC}] Build failed!"
 		popd > /dev/null
 		exit 1
 	fi
+	
+	echo -e "[${GREEN}*${NC}] Building package..."
+	pushd "./build/$1" > /dev/null
+	cpack
+	if [[ $? != 0 ]]; then
+		echo -e "[${RED}X${NC}] Packaging failed!"
+		popd > /dev/null
+		popd > /dev/null
+		exit 1
+	fi
+	popd > /dev/null
+	mv ./bin/*.deb ./bin/$1
 }
 
 cd ..
 if [[ ${BUILD_CONF} = Debug ]]; then
 	if [[ ${BUILD_ARCH} = arm64 ]]; then
-		do_cmake_configure debug-arm64
 		do_cmake_build debug-arm64
 	else
-		do_cmake_configure debug-x64
 		do_cmake_build debug-x64
 	fi
 else
 	if [[ ${BUILD_ARCH} = arm64 ]]; then
-		do_cmake_configure release-arm64
 		do_cmake_build release-arm64
 	else
-		do_cmake_configure release-x64
 		do_cmake_build release-x64
 	fi
 fi

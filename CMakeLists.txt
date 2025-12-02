@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 project(neo)
 set(CMAKE_C_STANDARD 99)
+set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 option(NEO_USE_WCHAR "Use wide charactrers for strings" FALSE)
 
@@ -35,19 +36,28 @@ set(APP_HEADER
 	"${PROJECT_SOURCE_DIR}/vendor/komihash/komihash.h"
 )
 add_executable(neo ${APP_SOURCE} ${APP_HEADER})
+
+# Configure application
+target_include_directories(neo PRIVATE
+	"${PROJECT_SOURCE_DIR}/src"
+	"${PROJECT_SOURCE_DIR}/vendor"
+	"${PROJECT_SOURCE_DIR}/vendor/vex/include"
+)
 target_link_libraries(neo PRIVATE -lc -lmenu -lpanel)
 target_compile_definitions(neo PRIVATE
 	NEO_VERSION_MAJOR=${ver_major}
 	NEO_VERSION_MINOR=${ver_minor}
 	NEO_VERSION_PATCH=${ver_patch}
 )
-set(OUTPUT_DIR "${PROJECT_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE}/${BUILD_ARCH}")
 set_target_properties(neo PROPERTIES
-	ARCHIVE_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
-	LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
-	RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
+	PROJECT_VERSION_MAJOR ${ver_major}
+	PROJECT_VERSION_MINOR ${ver_minor}
+	PROJECT_VERSION_PATCH ${ver_patch}
 )
 message("neodymium version: ${ver_major}.${ver_minor}.${ver_patch}")
+
+# Install application
+install(TARGETS neo)
 
 # Configure for wide strings
 if (NEO_USE_WCHAR)
@@ -57,9 +67,5 @@ else()
 	target_link_libraries(neo PRIVATE -lncurses)
 endif()
 
-# Add include directories
-target_include_directories(neo PRIVATE
-	"${PROJECT_SOURCE_DIR}/src"
-	"${PROJECT_SOURCE_DIR}/vendor"
-	"${PROJECT_SOURCE_DIR}/vendor/vex/include"
-)
+# Configure CPack
+include(Packing)

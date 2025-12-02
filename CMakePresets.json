@@ -4,10 +4,10 @@
 		{
 			"name": "base",
 			"hidden": true,
-			"binaryDir": "${sourceDir}/out/build/${presetName}",
+			"binaryDir": "${sourceDir}/build/${presetName}",
 			"generator": "Ninja",
 			"cacheVariables": {
-				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/bin/${presetName}",
 				"CMAKE_EXPORT_COMPILE_COMMANDS": true,
 				"BUILD_SHARED_LIBS": false
 			}
@@ -18,9 +18,6 @@
 			"architecture": {
 				"strategy": "external",
 				"value": "x64"
-			},
-			"cacheVariables": {
-				"BUILD_ARCH": "x64"
 			}
 		},
 		{
@@ -30,9 +27,6 @@
 			"architecture": {
 				"strategy": "external",
 				"value": "arm64"
-			},
-			"cacheVariables": {
-				"BUILD_ARCH": "arm64"
 			}
 		},
 		{

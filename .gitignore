@@ -56,12 +56,7 @@ dkms.conf
 
 # Build artifacts
 bin/
-src/debian/.debhelper/
-src/debian/neodymium/
-src/debian/debhelper-build-stamp
-src/debian/files
-src/debian/neodymium.substvars
-out/
+build/
 
 # Vendor libraries
 vendor/vex
