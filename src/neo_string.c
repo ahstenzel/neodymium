@@ -1,3 +1,4 @@
+#include "neo_common.h"
 #include "neo_string.h"
 
 static bool _string_check_resize(string_t *str, size_t len) {
@@ -20,7 +21,6 @@ static bool _string_valid(string_t *str) {
 
 bool string_init(string_t *str) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!str) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
@@ -32,6 +32,7 @@ bool string_init(string_t *str) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate string");
 		return false; 
 	}
+	str->data[0] = '\0';
 	str->length = 0;
 	str->capacity = NEO_STRING_DEFAULT_CAPACITY;
 	return true;
@@ -47,7 +48,6 @@ void string_clear(string_t *str) {
 
 bool string_insert(string_t *str, size_t pos, const NEO_CHAR_T *insert, size_t len) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
@@ -57,13 +57,13 @@ bool string_insert(string_t *str, size_t pos, const NEO_CHAR_T *insert, size_t l
 		return false;
 	}
 	if (!_string_check_resize(str, len)) {
-		NEO_THROW_ERROR(NERROR_BAD_ALLOC);
+		NEO_THROW_ERROR(NERROR_BAD_ALLOC, "Failed to resize string");
 		return false;
 	}
 
 	// Shift end of string forward
 	neo_memmove(&str->data[pos + len], &str->data[pos], str->length - pos);
-	neo_memcpy(&str->data[pos], insert, len);
+	neo_memcpy(&str->data[pos], insert, len * NEO_CHAR_SIZE);
 	str->length += len;
 	str->data[str->length] = '\0';
 	return true;
@@ -71,16 +71,15 @@ bool string_insert(string_t *str, size_t pos, const NEO_CHAR_T *insert, size_t l
 
 bool string_erase(string_t *str, size_t pos, size_t len) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
 	}
+	if (len == 0 || str->length == 0) { return true; }
 	if (pos >= str->length) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Position out of bounds");
 		return false;
 	}
-	if (len == 0 || str->length == 0) { return true; }
 	if (pos + len > str->length) { len = (str->length - pos); }
 
 	// Move end of string backwards
@@ -92,7 +91,6 @@ bool string_erase(string_t *str, size_t pos, size_t len) {
 
 bool string_erase_all(string_t *str) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
@@ -106,7 +104,6 @@ bool string_erase_all(string_t *str) {
 
 bool string_append(string_t *str, const NEO_CHAR_T *insert, int len) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
@@ -118,7 +115,7 @@ bool string_append(string_t *str, const NEO_CHAR_T *insert, int len) {
 	}
 
 	// Add to end of string
-	neo_memcpy(&str->data[str->length], insert, len);
+	neo_memcpy(&str->data[str->length], insert, len * NEO_CHAR_SIZE);
 	str->length += len;
 	str->data[str->length] = '\0';
 	return true;
@@ -126,7 +123,6 @@ bool string_append(string_t *str, const NEO_CHAR_T *insert, int len) {
 
 bool string_set(string_t *str, size_t pos, const NEO_CHAR_T* insert, int len) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
@@ -144,7 +140,7 @@ bool string_set(string_t *str, size_t pos, const NEO_CHAR_T* insert, int len) {
 	}
 
 	// Overwrite part of string
-	neo_memcpy(&str->data[pos], insert, len);
+	neo_memcpy(&str->data[pos], insert, len * NEO_CHAR_SIZE);
 	str->length += nlen;
 	str->data[str->length] = '\0';
 	return true;
@@ -152,7 +148,6 @@ bool string_set(string_t *str, size_t pos, const NEO_CHAR_T* insert, int len) {
 
 bool string_push_back(string_t *str, NEO_CHAR_T insert, size_t count) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
@@ -172,7 +167,6 @@ bool string_push_back(string_t *str, NEO_CHAR_T insert, size_t count) {
 
 bool string_pop_back(string_t *str, size_t count) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false;
@@ -187,14 +181,13 @@ bool string_pop_back(string_t *str, size_t count) {
 
 bool string_push_front(string_t *str, NEO_CHAR_T insert, size_t count) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
 	}
 	if (count == 0) { return true; }
 	if (!_string_check_resize(str, count)) {
-		NEO_THROW_ERROR(NERROR_BAD_ALLOC);
+		NEO_THROW_ERROR(NERROR_BAD_ALLOC, "Failed to resize string");
 		return false;
 	}
 
@@ -209,7 +202,6 @@ bool string_push_front(string_t *str, NEO_CHAR_T insert, size_t count) {
 
 bool string_pop_front(string_t *str, size_t count) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return false; 
@@ -224,7 +216,6 @@ bool string_pop_front(string_t *str, size_t count) {
 
 NEO_CHAR_T string_at(string_t *str, size_t pos) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return '\0'; 
@@ -243,7 +234,6 @@ NEO_CHAR_T string_at(string_t *str, size_t pos) {
 
 bool string_empty(string_t *str) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return true; 
@@ -253,7 +243,6 @@ bool string_empty(string_t *str) {
 
 NEO_CHAR_T string_front(string_t *str) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return '\0'; 
@@ -267,7 +256,6 @@ NEO_CHAR_T string_front(string_t *str) {
 
 NEO_CHAR_T string_back(string_t *str) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return '\0'; 
@@ -281,7 +269,6 @@ NEO_CHAR_T string_back(string_t *str) {
 
 bool string_duplicate(string_t *src, string_t* dst) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(src)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Source string invalid");
 		return false;
@@ -296,14 +283,13 @@ bool string_duplicate(string_t *src, string_t* dst) {
 	}
 
 	// Overwrite destination string contents
-	neo_memcpy(&dst->data[0], &src->data[0], src->length + 1);
+	neo_memcpy(&dst->data[0], &src->data[0], (src->length + 1) * NEO_CHAR_SIZE);
 	dst->length = src->length;
 	return true;
 }
 
 bool string_substr(string_t *src, size_t pos, size_t len, string_t* dst) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(src)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Source string invalid");
 		return false;
@@ -314,12 +300,12 @@ bool string_substr(string_t *src, size_t pos, size_t len, string_t* dst) {
 	}
 	if (pos + len > src->length) { len = src->length - pos; }
 	if (!_string_check_resize(dst, (dst->length > len) ? 0 : (len - dst->length))) {
-		NEO_THROW_ERROR(NERROR_BAD_ALLOC);
+		NEO_THROW_ERROR(NERROR_BAD_ALLOC, "Failed to resize string");
 		return false;
 	}
 
 	// Overwrite destination string contents
-	neo_memcpy(&dst->data[0], &src->data[pos], len);
+	neo_memcpy(&dst->data[0], &src->data[pos], len * NEO_CHAR_SIZE);
 	dst->length = len;
 	dst->data[dst->length] = '\0';
 	return true;
@@ -327,7 +313,6 @@ bool string_substr(string_t *src, size_t pos, size_t len, string_t* dst) {
 
 bool string_equal(string_t *str1, string_t *str2) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str1)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "First string invalid");
 		return false;
@@ -344,7 +329,6 @@ bool string_equal(string_t *str1, string_t *str2) {
 
 int string_reserve(string_t *str, size_t new_capacity) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return -1; 
@@ -365,7 +349,6 @@ int string_reserve(string_t *str, size_t new_capacity) {
 
 int string_wrap(string_t* str, size_t max_width) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return -1;
@@ -410,7 +393,6 @@ int string_wrap(string_t* str, size_t max_width) {
 
 int string_truncate(string_t *str, size_t max_width, int elipses) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return -1;
@@ -437,7 +419,6 @@ int string_truncate(string_t *str, size_t max_width, int elipses) {
 
 int string_find_next_of(string_t* str, const NEO_CHAR_T* find, int len, size_t pos) {
 	// Validate string
-	NEO_CLEAR_ERROR;
 	if (!_string_valid(str)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid string");
 		return -1;
@@ -461,9 +442,8 @@ int string_find_next_of(string_t* str, const NEO_CHAR_T* find, int len, size_t p
 }
 
 
-#ifdef NEO_USE_WCHAR
-
 NEO_CHAR_T* ascii_to_string(char* str, size_t len) {
+	#ifdef NEO_USE_WCHAR
 	NEO_CHAR_T* new_str = NEO_MALLOC(NEO_CHAR_SIZE * (len + 1));
 	if (!new_str) { 
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate wide string");
@@ -475,19 +455,12 @@ NEO_CHAR_T* ascii_to_string(char* str, size_t len) {
 	}
 	new_str[len] = '\0';
 	return new_str;
-}
-
-#else
-
-NEO_CHAR_T* ascii_to_string(char* str, size_t len) {
-	NEO_CHAR_T* new_str = strdup(str);
+	#else
+	NEO_CHAR_T* new_str = strndup(str, len);
 	if (!new_str) {
 		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to duplicate string");
 		return NULL; 
 	}
 	return new_str;
+	#endif
 }
-
-#endif
-
-

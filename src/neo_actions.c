@@ -2,44 +2,50 @@
 
 int neo_cb_new_file(neo_edit_ctx_t* context) {
 	size_t n = neo_edit_ctx_new_page(context);
-	if (n == SIZE_MAX) { return 1; }
+	if (n == SIZE_MAX) { 
+		NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to make new file");
+		return 1; 
+	}
 	neo_edit_ctx_set_page(context, n);
 	return 0;
 }
 
 int neo_cb_open_file(neo_edit_ctx_t* context) {
-	string_t message;
+	string_t message = { 0 };
+	string_t filename = { 0 };
 	string_init(&message);
-	string_set(&message, 0, NEO_STR_CAST("Open file!"), -1);
-	neo_dialog_message(context, &message);
+	string_init(&filename);
+	string_set(&message, 0, NEO_STR_CAST("Open file:"), -1);
+	neo_dialog_file(&message, &filename);
+
+	if (!string_empty(&filename)) {
+		size_t page_idx = 0;
+		if ((page_idx = neo_edit_ctx_open_page(context, filename.data)) == SIZE_MAX) {
+			NEO_THROW_ERROR_MSG(NERROR_GENERIC, "Failed to open file");
+			return 1;
+		}
+		else { neo_edit_ctx_set_page(context, page_idx); }
+	}
+
 	string_clear(&message);
+	string_clear(&filename);
 	return 0;
 }
 
 int neo_cb_save_file(neo_edit_ctx_t* context) {
-	string_t message;
-	string_init(&message);
-	string_set(&message, 0, NEO_STR_CAST("Save file!"), -1);
-	neo_dialog_message(context, &message);
-	string_clear(&message);
+	neo_edit_ctx_write_page(context, context->curr_page);
 	return 0;
 }
 
 int neo_cb_save_file_as(neo_edit_ctx_t* context) {
-	string_t message;
-	string_init(&message);
-	string_set(&message, 0, NEO_STR_CAST("Save file as!"), -1);
-	neo_dialog_message(context, &message);
-	string_clear(&message);
+	UNUSED(context);
+	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: save file as");
 	return 0;
 }
 
 int neo_cb_save_all_file(neo_edit_ctx_t* context) {
-	string_t message;
-	string_init(&message);
-	string_set(&message, 0, NEO_STR_CAST("Save all files!"), -1);
-	neo_dialog_message(context, &message);
-	string_clear(&message);
+	UNUSED(context);
+	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: save all files");
 	return 0;
 }
 
@@ -79,16 +85,19 @@ int neo_cb_quit(neo_edit_ctx_t* context) {
 
 int neo_cb_cut(neo_edit_ctx_t* context) {
 	UNUSED(context);
+	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: cut");
 	return 0;
 }
 
 int neo_cb_copy(neo_edit_ctx_t* context) {
 	UNUSED(context);
+	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: copy");
 	return 0;
 }
 
 int neo_cb_paste(neo_edit_ctx_t* context) {
 	UNUSED(context);
+	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: paste");
 	return 0;
 }
 
@@ -105,85 +114,24 @@ int neo_cb_duplicate(neo_edit_ctx_t *context) {
 
 int neo_cb_select_all(neo_edit_ctx_t* context) {
 	UNUSED(context);
+	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: select all");
 	return 0;
 }
 
 int neo_cb_undo(neo_edit_ctx_t* context) {
 	UNUSED(context);
+	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: undo");
 	return 0;
 }
 
 int neo_cb_redo(neo_edit_ctx_t* context) {
 	UNUSED(context);
+	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: redo");
 	return 0;
 }
 
 int neo_cb_about(neo_edit_ctx_t* context) {
 	UNUSED(context);
+	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: about");
 	return 0;
-}
-
-bool neo_dialog_message(neo_edit_ctx_t* context, string_t* message) {
-	if (!context) { return false; }
-
-	// Create window
-	int screen_rows, screen_cols;
-	getmaxyx(stdscr, screen_rows, screen_cols);
-	size_t window_cols = CLAMP(screen_cols, 8, 40);
-	int line_count = string_wrap(message, window_cols - 4);
-	if (line_count < 0) { return false; }
-	size_t window_rows = MIN(screen_rows, 3 + line_count);
-	WINDOW* nc_window = newwin(window_rows, window_cols, (screen_rows - window_rows) / 2, (screen_cols - window_cols) / 2);
-	if (!nc_window) {
-		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate ncurses window");
-		return false;
-	}
-	PANEL* nc_panel = new_panel(nc_window);
-	if (!nc_panel) {
-		NEO_THROW_ERROR_MSG(NERROR_BAD_ALLOC, "Failed to allocate ncurses panel");
-		delwin(nc_window);
-		return false;
-	}
-	top_panel(nc_panel);
-
-	// Draw window contents
-	wborder(nc_window, 0, 0, 0, 0, 0, 0, 0, 0);
-	wmove(nc_window, 1, 2);
-	neo_waddnstr(nc_window, message->data, message->length);
-	wmove(nc_window, 1 + line_count, (window_cols - 4) / 2);
-	wattron(nc_window, A_REVERSE);
-	neo_waddnstr(nc_window, NEO_STR_CAST("[OK]"), 4);
-	wattroff(nc_window, A_REVERSE);
-	curs_set(0);
-
-	// Event loop
-	while(true) {
-		update_panels();
-		doupdate();
-		int c = getch();
-		if (c == KEY_ENTER || c == '\n' || c == '\r' || c == ' ') {
-			break;
-		}
-	}
-
-	// Cleanup
-	hide_panel(nc_panel);
-	del_panel(nc_panel);
-	delwin(nc_window);
-	curs_set(1);
-	return true;
-}
-
-bool neo_dialog_choice(neo_edit_ctx_t* context, string_t* message, neo_choice_t* result) {
-	if (!context) { return false; }
-	UNUSED(message);
-	UNUSED(result);
-	return true;
-}
-
-bool neo_dialog_file(neo_edit_ctx_t* context, string_t* message, string_t* filename) {
-	if (!context) { return false; }
-	UNUSED(message);
-	UNUSED(filename);
-	return true;
 }

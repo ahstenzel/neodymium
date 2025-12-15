@@ -49,16 +49,4 @@ int neo_cb_redo(neo_edit_ctx_t* context);
 
 int neo_cb_about(neo_edit_ctx_t* context);
 
-typedef enum {
-	NCHOICE_OK = 0,
-	NCHOICE_NO,
-	NCHOICE_CANCEL
-} neo_choice_t;
-
-bool neo_dialog_message(neo_edit_ctx_t* context, string_t* message);
-
-bool neo_dialog_choice(neo_edit_ctx_t* context, string_t* message, neo_choice_t* result);
-
-bool neo_dialog_file(neo_edit_ctx_t* context, string_t* message, string_t* filename);
-
 #endif

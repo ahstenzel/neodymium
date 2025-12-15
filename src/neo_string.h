@@ -5,7 +5,7 @@
 #ifndef NEO_STRING_H
 #define NEO_STRING_H
 
-#include "neo_common.h"
+//#include "neo_common.h"
 
 /**
  * @brief Default capacity for a newly initialized string.
@@ -237,8 +237,6 @@ int string_truncate(string_t* str, size_t max_width, int elipses);
  */
 int string_find_next_of(string_t* str, const NEO_CHAR_T* find, int len, size_t pos);
 
-#ifdef NEO_USE_WCHAR
-
 /**
  * @brief Convert a normal ASCII character string to a wide string (if wide strings are enabled).
  * @details
@@ -250,21 +248,5 @@ int string_find_next_of(string_t* str, const NEO_CHAR_T* find, int len, size_t p
  * @return New string (or NULL on error)
  */
 NEO_CHAR_T* ascii_to_string(char* str, size_t len);
-
-#else
-
-/**
- * @brief Convert a normal ASCII character string to a wide string (if wide strings are enabled).
- * @details
- * If wide character support is enabled (NEO_USE_WCHAR is defined), this function will
- * allocate a wide string buffer and convert the contents of the given ASCII string to it. 
- * If wide character support is not enabled, this function simply copies the string.
- * @param str Char buffer
- * @param len Length of string
- * @return New string (or NULL on error)
- */
-NEO_CHAR_T* ascii_to_string(char* str, size_t len);
-
-#endif
 
 #endif // NEO_STRING_H

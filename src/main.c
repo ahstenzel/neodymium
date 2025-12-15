@@ -76,11 +76,14 @@ int main(int argc, char** argv) {
 
 		// Get input
 		if (edit_ctx.state != NSTATE_SHOULD_CLOSE) {
-			ret &= neo_edit_ctx_handle_input(&edit_ctx, getch());
+			ret &= neo_edit_ctx_handle_input(&edit_ctx);
 		}
 
 		// Check for close
-		if (!ret || _neo_error_code == SIGINT) { edit_ctx.state = NSTATE_SHOULD_CLOSE; }
+		if ((!ret && _neo_error_code == NERROR_BAD_ALLOC) || 
+			_neo_ext_signal == SIGINT) { 
+			edit_ctx.state = NSTATE_SHOULD_CLOSE; 
+		}
 	}
 
 	// Cleanup

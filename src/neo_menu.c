@@ -75,7 +75,6 @@ static size_t _neo_menu_bar_idx_last(neo_menu_bar_t* bar, int position) {
 
 bool neo_menu_group_init(neo_menu_group_t* group) {
 	// Validate group
-	NEO_CLEAR_ERROR;
 	if (!group) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu group");
 		return false; 
@@ -119,7 +118,6 @@ void neo_menu_group_clear(neo_menu_group_t* group) {
 
 neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int position, const NEO_CHAR_T *entry_name, NEO_CHAR_T entry_shortcut, void* entry_callback) {
 	// Validate group
-	NEO_CLEAR_ERROR;
 	size_t idx = 0;
 	if (!_neo_menu_group_valid(group)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu group");
@@ -161,7 +159,6 @@ neo_menu_entry_t* neo_menu_group_insert_entry(neo_menu_group_t* group, int posit
 
 void neo_menu_group_insert_seperator(neo_menu_group_t* group, int position) {
 	// Validate group
-	NEO_CLEAR_ERROR;
 	size_t idx = 0;
 	if (!_neo_menu_group_valid(group)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu group");
@@ -189,7 +186,6 @@ void neo_menu_group_insert_seperator(neo_menu_group_t* group, int position) {
 
 neo_menu_entry_t* neo_menu_group_get_entry(neo_menu_group_t* group, int position) {
 	// Validate group
-	NEO_CLEAR_ERROR;
 	if (!_neo_menu_group_valid(group)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu group");
 		return NULL;
@@ -206,7 +202,6 @@ neo_menu_entry_t* neo_menu_group_get_entry(neo_menu_group_t* group, int position
 
 int neo_menu_group_get_entry_position(neo_menu_group_t *group, const NEO_CHAR_T *name) {
 	// Validate group
-	NEO_CLEAR_ERROR;
 	if (!_neo_menu_group_valid(group)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu group");
 		return -1;
@@ -223,7 +218,6 @@ int neo_menu_group_get_entry_position(neo_menu_group_t *group, const NEO_CHAR_T 
 
 void neo_menu_group_remove_entry(neo_menu_group_t *group, int position) {
 	// Validate group
-	NEO_CLEAR_ERROR;
 	size_t idx = 0;
 	if (!_neo_menu_group_valid(group)) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu group");
@@ -247,7 +241,6 @@ void neo_menu_group_remove_entry(neo_menu_group_t *group, int position) {
 
 bool neo_menu_bar_init(neo_menu_bar_t *bar) {
 	// Validate bar
-	NEO_CLEAR_ERROR;
 	if (!bar) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");
 		return false;
@@ -299,7 +292,6 @@ void neo_menu_bar_clear(neo_menu_bar_t *bar) {
 
 bool neo_menu_bar_update(neo_menu_bar_t *bar) {
 	// Validate bar
-	NEO_CLEAR_ERROR;
 	if (!bar) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");
 		return false;
@@ -319,7 +311,6 @@ bool neo_menu_bar_update(neo_menu_bar_t *bar) {
 
 bool neo_menu_bar_draw(neo_menu_bar_t *bar) {
 	// Validate bar
-	NEO_CLEAR_ERROR;
 	if (!bar) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");
 		return false;
@@ -344,7 +335,6 @@ bool neo_menu_bar_draw(neo_menu_bar_t *bar) {
 
 neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, const NEO_CHAR_T *group_name, NEO_CHAR_T group_shortcut) {
 	// Validate bar
-	NEO_CLEAR_ERROR;
 	size_t idx = 0;
 	if (!_neo_menu_bar_valid(bar)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");
@@ -381,7 +371,6 @@ neo_menu_group_t* neo_menu_bar_insert_group(neo_menu_bar_t *bar, int position, c
 
 neo_menu_group_t* neo_menu_bar_get_group(neo_menu_bar_t* bar, int position) {
 	// Validate bar
-	NEO_CLEAR_ERROR;
 	if (!_neo_menu_bar_valid(bar)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");
 		return NULL;
@@ -398,7 +387,6 @@ neo_menu_group_t* neo_menu_bar_get_group(neo_menu_bar_t* bar, int position) {
 
 int neo_menu_bar_get_group_position(neo_menu_bar_t* bar, const NEO_CHAR_T* name) {
 	// Validate bar
-	NEO_CLEAR_ERROR;
 	if (!_neo_menu_bar_valid(bar)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");
 		return -1;
@@ -415,7 +403,6 @@ int neo_menu_bar_get_group_position(neo_menu_bar_t* bar, const NEO_CHAR_T* name)
 
 void neo_menu_bar_remove_group(neo_menu_bar_t* bar, int position) {
 	// Validate group
-	NEO_CLEAR_ERROR;
 	size_t idx = 0;
 	if (!_neo_menu_bar_valid(bar)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid menu bar");

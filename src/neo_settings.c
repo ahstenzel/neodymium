@@ -98,7 +98,6 @@ static bool _neo_settings_check_resize(neo_settings_t* settings) {
 
 bool neo_settings_init(neo_settings_t* settings) {
 	// Validate settings
-	NEO_CLEAR_ERROR;
 	if (!settings) { 
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid settings");
 		return false; 

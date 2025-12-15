@@ -138,7 +138,7 @@ struct neo_edit_ctx_t {
 	neo_state_t state;
 };
 
-#define EDITOR_GET_CURR_PAGE(ctx) ((ctx) && (ctx)->curr_page < (ctx)->num_pages) ? &(ctx)->pages[(ctx)->curr_page] : NULL
+#define EDITOR_GET_CURR_PAGE(ctx) (((ctx) && (ctx)->curr_page < (ctx)->num_pages) ? &(ctx)->pages[(ctx)->curr_page] : NULL)
 
 typedef struct neo_edit_row_t neo_edit_row_t;
 typedef struct neo_edit_page_t neo_edit_page_t;
@@ -299,8 +299,9 @@ void neo_edit_page_move_cursor(neo_edit_page_t* page, neo_dir_t dir, size_t num)
  * @brief Set the filename for the page.
  * @param page Page pointer
  * @param filename Full filename
+ * @return True if successful
  */
-void neo_edit_page_set_filename(neo_edit_page_t* page, string_t filename);
+bool neo_edit_page_set_filename(neo_edit_page_t* page, NEO_CHAR_T* filename);
 
 /**
  * @brief Get the index of the page in the list of pages.
@@ -352,6 +353,14 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t* context);
 size_t neo_edit_ctx_open_page(neo_edit_ctx_t* context, char* filename);
 
 /**
+ * @brief Write the contents of a page to file.
+ * @param context Context pointer
+ * @param position Index of page (or -1 for the last page)
+ * @return True if successful
+ */
+bool neo_edit_ctx_write_page(neo_edit_ctx_t* context, int position);
+
+/**
  * @brief Open a new blank page.
  * @param context Context pointer
  * @return Index of new page (or SIZE_MAX on error)
@@ -377,10 +386,9 @@ bool neo_edit_ctx_set_page(neo_edit_ctx_t* context, int position);
 /**
  * @brief Respond to keyboard input.
  * @param context Context pointer
- * @param key Keyboard code
  * @return True if successful
  */
-bool neo_edit_ctx_handle_input(neo_edit_ctx_t* context, int key);
+bool neo_edit_ctx_handle_input(neo_edit_ctx_t* context);
 
 /**
  * @brief Set the status message at the bottom of the screen.

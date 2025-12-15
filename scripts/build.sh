@@ -10,7 +10,7 @@ pushd ${SCRIPT_DIR} > /dev/null
 function show_help
 {
 	echo "Usage: $(basename $0) [-b config] [-a arch]"
-	echo " -b) Build configuration [debug(default) | release]"
+	echo " -b) Build configuration [Debug(default) | Release]"
 	echo " -a) Build architecture [x64(default) | arm64]"
 	echo " -h) Show this help dialogue"
 }
