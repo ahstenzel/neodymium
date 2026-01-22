@@ -114,6 +114,10 @@ struct neo_edit_page_t {
 	size_t cursor_x, cursor_y, rcursor_x, rcursor_y;
 	size_t window_rows;
 	size_t window_cols;
+	int select_start_row;
+	int select_start_col;
+	int select_end_row;
+	int select_end_col;
 	neo_page_flag_t flags;
 };
 
@@ -286,6 +290,46 @@ void neo_edit_page_set_cursor_row(neo_edit_page_t* page, int row);
  * @param col Column index (or -1 for the end)
  */
 void neo_edit_page_set_cursor_col(neo_edit_page_t* page, int col);
+
+/**
+ * @brief Clear any text selection on the page.
+ * @param page Page pointer
+ */
+void neo_edit_page_clear_select(neo_edit_page_t* page);
+
+/**
+ * @brief Set the beginning of the text selection on the page.
+ * @param page Page pointer
+ * @param col Column index (or cursor X position if -1)
+ * @param row Row index (or cursor Y position if -1)
+ * @return True if successful
+ */
+bool neo_edit_page_set_select_start(neo_edit_page_t* page, int col, int row);
+
+/**
+ * @brief Set the end of the text selection on the page.
+ * @param page Page pointer
+ * @param col Column index (or cursor X position if -1)
+ * @param row Row index (or cursor Y position if -1)
+ * @return True if successful
+ */
+bool neo_edit_page_set_select_end(neo_edit_page_t* page, int col, int row);
+
+/**
+ * @brief Check if a selection is currently being made on the page.
+ * @param page Page pointer
+ * @return True if a selection area is highlighted
+ */
+bool neo_edit_page_is_selection_active(neo_edit_page_t* page);
+
+/**
+ * @brief Check if the given cursor position is in the highlighted selection.
+ * @param page Page pointer
+ * @param col Column to check (or -1 to check if any column in the row is selected)
+ * @param row Row to check
+ * @return True if selected
+ */
+bool neo_edit_page_pos_in_selection(neo_edit_page_t* page, int col, int row);
 
 /**
  * @brief Move the cursor on the page relatively.

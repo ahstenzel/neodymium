@@ -10,7 +10,8 @@ int main(int argc, char** argv) {
 		.description = "Terminal text editor with rich features.",
 		.version = NEO_VERSION_STR
 	};
-	vex_ctx parser = vex_init(parser_info);
+	vex_ctx parser = { 0 };
+	vex_init(&parser, parser_info);
 	vex_parse(&parser, argc, argv);
 	if (vex_arg_found(&parser, "v")) {
 		const char* ver = vex_get_version(&parser);

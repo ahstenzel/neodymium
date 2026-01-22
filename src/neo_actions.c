@@ -113,8 +113,13 @@ int neo_cb_duplicate(neo_edit_ctx_t *context) {
 }
 
 int neo_cb_select_all(neo_edit_ctx_t* context) {
-	UNUSED(context);
-	NEO_THROW_ERROR_MSG(NERROR_UNIMPLEMENTED, "Unimplemented feature: select all");
+	neo_edit_page_t* curr_page = EDITOR_GET_CURR_PAGE(context);
+	neo_edit_row_t* last_row = neo_edit_page_get_row(curr_page, -1);
+	if (!curr_page || !last_row) { return 0; }
+	neo_edit_page_set_select_start(curr_page, 0, 0);
+	neo_edit_page_set_cursor_row(curr_page, -1);
+	neo_edit_page_set_cursor_col(curr_page, -1);
+	neo_edit_page_set_select_end(curr_page, -1, -1);
 	return 0;
 }
 

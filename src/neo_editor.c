@@ -268,6 +268,10 @@ bool neo_edit_page_init(neo_edit_page_t* page, neo_edit_ctx_t* context) {
 	page->cursor_y = 0;
 	page->rcursor_x = 0;
 	page->rcursor_y = 0;
+	page->select_start_row = -1;
+	page->select_start_col = -1;
+	page->select_end_row = -1;
+	page->select_end_col = -1;
 	page->flags = 0;
 	return true;
 }
@@ -312,6 +316,7 @@ bool neo_edit_page_update(neo_edit_page_t* page) {
 	}
 
 	// Iterate through rows
+	page->num_cols = 0;
 	for(size_t i = 0; i < page->num_rows; ++i) {
 		neo_edit_row_t* row = &page->rows[i];
 		row->page = page;
@@ -376,7 +381,16 @@ bool neo_edit_page_draw(neo_edit_page_t* page) {
 		else {
 			neo_edit_row_t* row = &page->rows[row_idx];
 			int len = CLAMP((int)row->rcontent.length - (int)page->col_off, 0, (int)page->window_cols);
-			neo_waddnstr(page->nc_window, &row->rcontent.data[page->col_off], len);
+			if (neo_edit_page_is_selection_active(page) && neo_edit_page_pos_in_selection(page, -1, row_idx)) {
+				bool toggle_highlight = false;
+				for(size_t j = 0; j < len; ++j) {
+					bool in_selection = neo_edit_page_pos_in_selection(page, (int)page->col_off + j, row_idx);
+					neo_waddch(page->nc_window, row->rcontent.data[page->col_off + j] | (in_selection ? A_REVERSE : 0));
+				}
+			}
+			else {
+				neo_waddnstr(page->nc_window, &row->rcontent.data[page->col_off], len);
+			}
 		}
 	}
 
@@ -503,7 +517,7 @@ void neo_edit_page_remove_row(neo_edit_page_t* page, int position) {
 	page->num_rows--;
 }
 
-void neo_edit_page_set_cursor_row(neo_edit_page_t *page, int row) {
+void neo_edit_page_set_cursor_row(neo_edit_page_t* page, int row) {
 	// Validate page
 	if (!_neo_edit_page_valid(page)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid page");
@@ -521,7 +535,7 @@ void neo_edit_page_set_cursor_row(neo_edit_page_t *page, int row) {
 	page->cursor_y = idx;
 }
 
-void neo_edit_page_set_cursor_col(neo_edit_page_t *page, int col) {
+void neo_edit_page_set_cursor_col(neo_edit_page_t* page, int col) {
 	// Validate page
 	if (!_neo_edit_page_valid(page)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid page");
@@ -540,6 +554,92 @@ void neo_edit_page_set_cursor_col(neo_edit_page_t *page, int col) {
 		return;
 	}
 	page->cursor_x = idx;
+}
+
+void neo_edit_page_clear_select(neo_edit_page_t* page) {
+	// Validate page
+	if (!_neo_edit_page_valid(page)) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid page");
+		return; 
+	}
+	page->select_start_row = -1;
+	page->select_start_col = -1;
+	page->select_end_row = -1;
+	page->select_end_col = -1;
+}
+
+bool neo_edit_page_set_select_start(neo_edit_page_t* page, int col, int row) {
+	// Validate page
+	if (!_neo_edit_page_valid(page)) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid page");
+		return false; 
+	}
+	page->select_start_col = (col < 0) ? page->cursor_x : col;
+	page->select_start_row = (row < 0) ? page->cursor_y : row;
+	return true;
+}
+
+bool neo_edit_page_set_select_end(neo_edit_page_t* page, int col, int row) {
+	// Validate page
+	if (!_neo_edit_page_valid(page)) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid page");
+		return false; 
+	}
+	page->select_end_col = (col < 0) ? page->cursor_x : col;
+	page->select_end_row = (row < 0) ? page->cursor_y : row;
+	return true;
+}
+
+bool neo_edit_page_is_selection_active(neo_edit_page_t* page) {
+	// Validate page
+	if (!_neo_edit_page_valid(page)) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid page");
+		return false; 
+	}
+	return (
+		page->select_start_col >= 0 && page->select_start_row >= 0 && 
+		page->select_end_col >= 0 && page->select_end_row >= 0
+	);
+}
+
+bool neo_edit_page_pos_in_selection(neo_edit_page_t* page, int col, int row) {
+	// Validate page
+	if (!_neo_edit_page_valid(page)) {
+		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid page");
+		return false; 
+	}
+	if (
+		(page->select_start_row == page->select_end_row && row == page->select_start_row) ||
+		(page->select_start_row < page->select_end_row && (row >= page->select_start_row && row <= page->select_end_row )) ||
+		(page->select_start_row > page->select_end_row && (row >= page->select_end_row && row <= page->select_start_row ))
+	) {
+		// Position is on a selected row
+		if (col < 0) { return true; }
+		if (page->select_start_row == page->select_end_row) {
+			if (
+				(page->select_start_col == page->select_end_col && col == page->select_start_col) ||
+				(page->select_start_col < page->select_end_col && (col >= page->select_start_col && col < page->select_end_col)) ||
+				(page->select_start_col > page->select_end_col && (col >= page->select_end_col && col < page->select_start_col))
+			) { return true; }
+		}
+		else if (row == page->select_start_row) {
+			if (
+				(page->select_start_row < page->select_end_row && col >= page->select_start_col) ||
+				(page->select_start_row > page->select_end_row && col < page->select_start_col)
+			) { return true; }
+		}
+		else if (row == page->select_end_row) {
+			if (
+				(page->select_end_row < page->select_start_row && col >= page->select_end_col) ||
+				(page->select_end_row > page->select_start_row && col < page->select_end_col)
+			) { return true; }
+		}
+		else {
+			// Entire row is selected
+			return true;
+		}
+	}
+	return false;
 }
 
 void neo_edit_page_move_cursor(neo_edit_page_t *page, neo_dir_t dir, size_t num) {
@@ -923,8 +1023,8 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 
 	// Draw cursor position
 	if (curr_page) {
-		wmove(context->nc_window, context->window_rows - NEO_SIZE_FOOTER + 1, context->window_cols - 16);
-		wprintw(context->nc_window, "L:%d C:%d", (int)curr_page->rcursor_y, (int)curr_page->rcursor_x);
+		wmove(context->nc_window, context->window_rows - NEO_SIZE_FOOTER + 1, context->window_cols - 32);
+		wprintw(context->nc_window, "L:%d C:%d Ss:%d,%d Se:%d,%d", (int)curr_page->rcursor_y, (int)curr_page->rcursor_x, curr_page->select_start_row, curr_page->select_start_col, curr_page->select_end_row, curr_page->select_end_col);
 	}
 
 	// Draw file bar
@@ -942,7 +1042,7 @@ bool neo_edit_ctx_draw(neo_edit_ctx_t *context) {
 	return true;
 }
 
-size_t neo_edit_ctx_open_page(neo_edit_ctx_t* context, NEO_CHAR_T* filename) {
+size_t neo_edit_ctx_open_page(neo_edit_ctx_t* context, char* filename) {
 	// Validate context
 	if (!_neo_edit_ctx_valid(context)) {
 		NEO_THROW_ERROR_MSG(NERROR_INVALID_PARAM, "Invalid context");
@@ -1182,20 +1282,56 @@ bool neo_edit_ctx_handle_input(neo_edit_ctx_t* context) {
 		}
 	}
 	switch(key) {
-		case KEY_LEFT:  if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_LEFT, 1); } break;
-		case KEY_RIGHT: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_RIGHT, 1); } break;
-		case KEY_UP:    if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_UP, 1); } break;
-		case KEY_DOWN:  if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_DOWN, 1); } break;
-		case KEY_PPAGE: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_UP, curr_page->window_rows); } break;
-		case KEY_NPAGE: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_DOWN, curr_page->window_rows); } break;
-		case KEY_HOME:  if (curr_page) { neo_edit_page_set_cursor_col(curr_page, 0); } break;
-		case KEY_END:   if (curr_page) { neo_edit_page_set_cursor_col(curr_page, -1); } break;
-		case KEY_SLEFT: /* Shift-left */ break;
-		case KEY_SRIGHT: /* Shift-right */ break;
-		case KEY_SR: /* Shift-up */ break;
-		case KEY_SF: /* Shift-down */ break;
-		case KEY_SHOME: /* Shift-home */ break;
-		case KEY_SEND: /* Shift-end */ break;
+		case KEY_LEFT:  if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_LEFT, 1); neo_edit_page_clear_select(curr_page); } break;
+		case KEY_RIGHT: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_RIGHT, 1); neo_edit_page_clear_select(curr_page); } break;
+		case KEY_UP:    if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_UP, 1); neo_edit_page_clear_select(curr_page); } break;
+		case KEY_DOWN:  if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_DOWN, 1); neo_edit_page_clear_select(curr_page); } break;
+		case KEY_PPAGE: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_UP, curr_page->window_rows); neo_edit_page_clear_select(curr_page); } break;
+		case KEY_NPAGE: if (curr_page) { neo_edit_page_move_cursor(curr_page, NDIR_DOWN, curr_page->window_rows); neo_edit_page_clear_select(curr_page); } break;
+		case KEY_HOME:  if (curr_page) { neo_edit_page_set_cursor_col(curr_page, 0); neo_edit_page_clear_select(curr_page); } break;
+		case KEY_END:   if (curr_page) { neo_edit_page_set_cursor_col(curr_page, -1); neo_edit_page_clear_select(curr_page); } break;
+		case KEY_SLEFT: if (curr_page) {
+			if (!neo_edit_page_is_selection_active(curr_page)) {
+				neo_edit_page_set_select_start(curr_page, -1, -1);
+			}
+			neo_edit_page_move_cursor(curr_page, NDIR_LEFT, 1);
+			neo_edit_page_set_select_end(curr_page, -1, -1);
+		} break;
+		case KEY_SRIGHT: if (curr_page) {
+			if (!neo_edit_page_is_selection_active(curr_page)) {
+				neo_edit_page_set_select_start(curr_page, -1, -1);
+			}
+			neo_edit_page_move_cursor(curr_page, NDIR_RIGHT, 1);
+			neo_edit_page_set_select_end(curr_page, -1, -1);
+		} break;
+		case KEY_SR: if (curr_page) {
+			if (!neo_edit_page_is_selection_active(curr_page)) {
+				neo_edit_page_set_select_start(curr_page, -1, -1);
+			}
+			neo_edit_page_move_cursor(curr_page, NDIR_UP, 1);
+			neo_edit_page_set_select_end(curr_page, -1, -1);
+		} break;
+		case KEY_SF: if (curr_page) {
+			if (!neo_edit_page_is_selection_active(curr_page)) {
+				neo_edit_page_set_select_start(curr_page, -1, -1);
+			}
+			neo_edit_page_move_cursor(curr_page, NDIR_DOWN, 1);
+			neo_edit_page_set_select_end(curr_page, -1, -1);
+		} break;
+		case KEY_SHOME: if (curr_page) {
+			if (!neo_edit_page_is_selection_active(curr_page)) {
+				neo_edit_page_set_select_start(curr_page, -1, -1);
+			}
+			neo_edit_page_set_cursor_col(curr_page, 0);
+			neo_edit_page_set_select_end(curr_page, -1, -1);
+		} break;
+		case KEY_SEND: if (curr_page) {
+			if (!neo_edit_page_is_selection_active(curr_page)) {
+				neo_edit_page_set_select_start(curr_page, -1, -1);
+			}
+			neo_edit_page_set_cursor_col(curr_page, -1);
+			neo_edit_page_set_select_end(curr_page, -1, -1);
+		} break;
 		case KEY_BACKSPACE: {
 			if (!curr_page) { break; }
 			if (PAGE_FLAG_ISSET(curr_page, NPAGE_FLAG_READONLY)) { 
